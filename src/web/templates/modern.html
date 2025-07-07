@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{TITLE}}</title>
+    <style>{{CSS_MODERN}}</style>
+    <link rel="stylesheet" href="/src/web/css/modern.css">
+    <script src="/src/web/js/portal.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{TITLE}}</h1>
+            <p class="subtitle">Configure your WiFi connection</p>
+        </div>
+
+        <div class="status-panel">
+            <div id="status">{{STATUS}}</div>
+        </div>
+
+        <div class="wifi-panel">
+            <div class="networks-header">
+                <h2>Available Networks</h2>
+                <div class="button-group">
+                    <button id="manualToggleBtn" class="btn btn-secondary btn-compact">Enter Manually</button>
+                    <button id="scanBtn" class="btn btn-secondary btn-compact">
+                        <span id="scanBtnText">Scan</span>
+                        <span id="scanSpinner" class="spinner" style="display: none;">⟳</span>
+                    </button>
+                    <button id="resetBtn" class="btn btn-danger btn-compact">Reset Configuration</button>
+                </div>
+            </div>
+            <div id="networks" class="networks">{{NETWORKS}}</div>
+        </div>
+
+        <div class="connect-panel">
+            <div id="manualConnectForm" class="manual-form" style="display: none;">
+                <h3>Manual Connection</h3>
+                <form id="connectForm">
+                    <div class="form-group">
+                        <label for="ssid">Network Name (SSID):</label>
+                        <input type="text" id="ssid" name="ssid" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password">
+                    </div>
+                    {{CUSTOM_PARAMETERS}}
+                    <button type="submit" class="btn btn-primary btn-compact">Connect</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>{{JS_PORTAL}}</script>
+</body>
+</html>

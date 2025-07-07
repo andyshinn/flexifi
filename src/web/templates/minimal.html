@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{TITLE}}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>{{CSS_MINIMAL}}</style>
+</head>
+<body>
+    <h1>{{TITLE}}</h1>
+    <div id="status">{{STATUS}}</div>
+    <button onclick="scanNetworks()">Scan</button>
+    <div id="networks">{{NETWORKS}}</div>
+    <form onsubmit="connectToWiFi(); return false;">
+        SSID: <input type="text" id="ssid" required><br>
+        Password: <input type="password" id="password"><br>
+        {{CUSTOM_PARAMETERS}}
+        <button type="submit">Connect</button>
+    </form>
+    <button onclick="resetConfig()">Reset</button>
+    <script>{{JS_PORTAL}}</script>
+</body>
+</html>

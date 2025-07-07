@@ -1,0 +1,26 @@
+{
+    "files.associations": {
+        "**/.github/workflows/dependabot.yml": "yaml",
+        "print": "cpp"
+    },
+    "workbench.colorCustomizations": {
+        "activityBar.activeBackground": "#be0775",
+        "activityBar.background": "#be0775",
+        "activityBar.foreground": "#e7e7e7",
+        "activityBar.inactiveForeground": "#e7e7e799",
+        "activityBarBadge.background": "#72b807",
+        "activityBarBadge.foreground": "#15202b",
+        "commandCenter.border": "#e7e7e799",
+        "sash.hoverBorder": "#be0775",
+        "statusBar.background": "#8d0557",
+        "statusBar.foreground": "#e7e7e7",
+        "statusBarItem.hoverBackground": "#be0775",
+        "statusBarItem.remoteBackground": "#8d0557",
+        "statusBarItem.remoteForeground": "#e7e7e7",
+        "titleBar.activeBackground": "#8d0557",
+        "titleBar.activeForeground": "#e7e7e7",
+        "titleBar.inactiveBackground": "#8d055799",
+        "titleBar.inactiveForeground": "#e7e7e799"
+    },
+    "peacock.color": "#8d0557"
+}

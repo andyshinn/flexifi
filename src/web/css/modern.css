@@ -1,0 +1,260 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 10px; /* Reduced for captive portal */
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    overflow: hidden;
+}
+
+.header {
+    background: #4a5568;
+    color: white;
+    padding: 15px; /* Reduced padding */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h1 {
+    font-size: 1.5em; /* Smaller title */
+    margin-bottom: 0; /* No margin for inline layout */
+}
+
+.subtitle {
+    opacity: 0.9;
+}
+
+.status-panel, .wifi-panel, .connect-panel, .actions {
+    padding: 12px; /* Further reduced padding for compact layout */
+}
+
+.status-panel {
+    padding: 8px 12px; /* Minimal padding for status */
+}
+
+.status {
+    padding: 15px;
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.status.ready {
+    background: #e6fffa;
+    color: #065f46;
+}
+
+.status.scanning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status.connecting {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.status.connected {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status.failed {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status.error {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status.throttled {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+.form-group {
+    margin-bottom: 10px; /* More compact spacing */
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.form-group label {
+    min-width: 120px; /* Fixed width for alignment */
+    margin-bottom: 0;
+    font-weight: 500;
+    flex-shrink: 0; /* Prevent label from shrinking */
+}
+
+.form-group input, .form-group select, .form-group textarea {
+    flex: 1; /* Take remaining space */
+    padding: 10px; /* Reduced padding for compactness */
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+}
+
+.network-list {
+    margin-top: 15px;
+}
+
+.network-item {
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.network-item:hover {
+    background: #f9fafb;
+}
+
+.network-name {
+    font-weight: 500;
+}
+
+.network-info {
+    color: #6b7280;
+}
+
+.actions {
+    text-align: center;
+}
+
+.required {
+    color: #dc2626;
+}
+
+/* Manual connect toggle */
+.manual-connect-toggle {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.manual-form {
+    padding-top: 0px; /* Compact spacing */
+}
+
+.manual-form h3 {
+    margin-bottom: 8px; /* Reduced spacing */
+    color: #374151;
+    font-size: 1.0em; /* Smaller font */
+}
+
+/* Scan button spinner */
+.spinner {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Compact network list for captive portal */
+.network-item {
+    padding: 8px 12px; /* Reduced padding */
+}
+
+/* Reduce heading sizes for compact layout */
+h2 {
+    font-size: 1.2em;
+    margin-bottom: 10px;
+}
+
+/* Networks header with inline scan button */
+.networks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.networks-header h2 {
+    margin-bottom: 0;
+    flex-grow: 1;
+}
+
+/* Compact scan button */
+.btn-compact {
+    padding: 8px 16px;
+    font-size: 13px;
+    min-width: 60px;
+}
+
+/* Button group layout */
+.button-group {
+    display: flex;
+    gap: 8px;
+}
+
+.button-group .btn {
+    margin: 0;
+}

@@ -1,0 +1,42 @@
+{
+    "name": "flexifi",
+    "version": "1.0.1",
+    "description": "Modern async captive portal WiFi manager for ESP32",
+    "keywords": [
+        "wifi",
+        "captive portal",
+        "esp32",
+        "async",
+        "websocket"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/andyshinn/flexifi"
+    },
+    "authors": [
+        {
+            "name": "Andy Shinn",
+            "email": "andys@andyshinn.as"
+        }
+    ],
+    "license": "MIT",
+    "dependencies": {
+        "esp32async/ESPAsyncWebServer": "^3.7.0",
+        "bblanchon/ArduinoJson": "^6.21.0"
+    },
+    "frameworks": [
+        "arduino"
+    ],
+    "platforms": [
+        "espressif32"
+    ],
+    "export": {
+        "include": [
+            "src",
+            "tools"
+        ]
+    },
+    "scripts": {
+        "postinstall": "tools/embed_assets.py"
+    }
+}

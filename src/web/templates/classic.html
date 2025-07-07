@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{TITLE}}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>{{CSS_CLASSIC}}</style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{TITLE}}</h1>
+        
+        <div class="panel">
+            <h2>Status</h2>
+            <div id="status">{{STATUS}}</div>
+        </div>
+        
+        <div class="panel">
+            <h2>WiFi Networks</h2>
+            <button onclick="scanNetworks()">Scan</button>
+            <div id="networks">{{NETWORKS}}</div>
+        </div>
+        
+        <div class="panel">
+            <h2>Connect</h2>
+            <form onsubmit="connectToWiFi(); return false;">
+                <p>
+                    <label>SSID:</label><br>
+                    <input type="text" id="ssid" required>
+                </p>
+                <p>
+                    <label>Password:</label><br>
+                    <input type="password" id="password">
+                </p>
+                {{CUSTOM_PARAMETERS}}
+                <p>
+                    <button type="submit">Connect</button>
+                </p>
+            </form>
+        </div>
+        
+        <div class="panel">
+            <button onclick="resetConfig()">Reset</button>
+        </div>
+    </div>
+    
+    <script>{{JS_PORTAL}}</script>
+</body>
+</html>

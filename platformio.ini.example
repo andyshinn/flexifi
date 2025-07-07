@@ -1,0 +1,29 @@
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+
+# Build configuration
+build_flags =
+    -DFLEXIFI_DEBUG_LEVEL=3
+    -DFLEXIFI_ENABLE_MDNS
+
+# Library dependencies
+lib_deps =
+    ESPAsyncWebServer
+    ArduinoJson
+
+# Auto-embed web assets before compilation
+extra_scripts = 
+    pre:tools/embed_assets.py
+
+# Monitor configuration
+monitor_speed = 115200
+monitor_filters = esp32_exception_decoder
+
+# Upload configuration
+upload_speed = 921600
+
+# Optional: Enable OTA uploads
+; upload_protocol = espota
+; upload_port = 192.168.1.100
