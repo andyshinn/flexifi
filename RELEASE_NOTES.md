@@ -1,5 +1,33 @@
 # Flexifi Release Notes
 
+## v1.0.2 - 2025-07-08
+
+### 🔒 New Security Feature
+- **Automatic Password Generation**: Added optional secure password generation for captive portal
+  - Constructor parameter: `Flexifi portal(&server, true)` enables auto-generation
+  - Uses 8-character alphanumeric passwords with cryptographically secure seeding
+  - Automatic usage when no password provided to `startPortal()`
+  - Periodic logging every 30 seconds (configurable via `FLEXIFI_PASSWORD_LOG_INTERVAL`)
+
+### 🖥️ Developer Experience
+- **LCD Display Support**: Added `getGeneratedPassword()` method for external display integration
+- **Release Build Logging**: Enhanced logging configuration for release environments
+  - Added `CORE_DEBUG_LEVEL=3` support for ESP_LOGI messages in release builds
+  - Configurable password logging interval via macro
+
+### 📖 Documentation
+- **Comprehensive README Updates**: Added complete password generation documentation
+- **API Reference**: Updated with new `getGeneratedPassword()` method
+- **Configuration Guide**: Added `FLEXIFI_PASSWORD_LOG_INTERVAL` macro documentation
+- **Usage Examples**: Added practical examples for password generation and LCD display
+
+### 🔧 Technical Improvements
+- **Smart Password Logic**: Generated passwords only used when no password provided
+- **Configurable Timing**: `FLEXIFI_PASSWORD_LOG_INTERVAL` macro for customizable logging frequency
+- **Memory Efficient**: Minimal overhead when password generation is disabled
+
+---
+
 ## v1.0.1 - 2025-07-07
 
 ### 🎨 UI/UX Improvements

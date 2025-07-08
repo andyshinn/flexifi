@@ -11,10 +11,13 @@ This file contains important project information and conventions for Claude Code
 
 ### Release Process
 1. Update version in `library.json`
-2. Create a new section in `RELEASE_NOTES.md` for the changes in the new version
-3. Use `pio package pack` to create a new tar.gz file for the release
-4. Use `pio pkg publish --no-interactive --type library` to publish to PlatformIO Registry
-5. Use `gh release create X.X.X Flexifi-X.X.X.tar.gz --title "X.X.X" --notes "Release notes for this version only"` to create GitHub release
+2. Update `README.md` with any new features or changes
+3. Create a new section in `RELEASE_NOTES.md` for the changes in the new version
+4. Commit changes: `git add . && git commit -m "Release X.X.X"`
+5. Create and push tag: `git tag X.X.X && git push origin main --tags`
+6. Use `pio package pack` to create a new tar.gz file for the release
+7. Use `pio pkg publish --no-interactive --type library` to publish to PlatformIO Registry
+8. Use `gh release create X.X.X Flexifi-X.X.X.tar.gz --title "X.X.X" --notes "Release notes for this version only"` to create GitHub release
 
 ## Build and Development
 

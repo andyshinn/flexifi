@@ -1,6 +1,6 @@
 {
     "name": "Flexifi",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Modern async captive portal WiFi manager for ESP32",
     "keywords": [
         "wifi",
