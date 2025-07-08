@@ -30,7 +30,14 @@ function handleWebSocketMessage(data) {
         console.log('📥 WebSocket message received:', msg);
         
         if (msg.type === 'scan_complete') {
-            updateNetworks(msg.data.networks);
+            if (msg.data.refresh_networks) {
+                // New approach: refresh networks from API instead of receiving via WebSocket
+                console.log('🔄 Received refresh signal, fetching networks from API...');
+                loadNetworksFromAPI();
+            } else if (msg.data.networks) {
+                // Legacy fallback for direct network data
+                updateNetworks(msg.data.networks);
+            }
             scanInProgress = false;
             updateScanButton(false); // Re-enable scan button
         } else if (msg.type === 'status_update') {
@@ -53,7 +60,7 @@ function handleWebSocketMessage(data) {
                 } else {
                     updateStatus('error', msg.message || 'Scan failed');
                 }
-                updateNetworks([]); // Clear networks
+                // Don't clear networks on scan failure - preserve existing results
             }
         }
     } catch (e) {
@@ -104,11 +111,11 @@ function scanNetworks() {
                     // Handle throttled response
                     console.log('⏳ Scan throttled:', data.message);
                     updateStatus('throttled', data.message);
-                    updateNetworks([]); // Show empty networks but not scanning
+                    // Don't clear networks when throttled - preserve existing results
                 } else {
                     console.log('⚠️ Scan response missing data or failed');
                     updateStatus('error', data.message || 'Scan failed');
-                    updateNetworks([]);
+                    // Don't clear networks on error - preserve existing results
                 }
             })
             .catch(error => {
@@ -116,7 +123,7 @@ function scanNetworks() {
                 scanInProgress = false;
                 updateScanButton(false); // Re-enable button
                 updateStatus('error', 'Scan failed. Please try again.');
-                updateNetworks([]); // Clear networks
+                // Don't clear networks on error - preserve existing results
             });
     }
 }
@@ -243,6 +250,37 @@ function getStatusMessage(status) {
     }
 }
 
+function createSignalStrengthIndicator(rssi) {
+    // Convert RSSI to signal strength (0-5 bars) with granular WiFi ranges
+    // 5-bar system provides more detailed signal quality representation
+    let strength = 0;
+    if (rssi >= -30) strength = 5;      // Exceptional: 5 bars, green (-30 and above)
+    else if (rssi >= -50) strength = 4; // Excellent: 4 bars, yellow-green (-50 to -30)
+    else if (rssi >= -60) strength = 3; // Good: 3 bars, yellow-orange (-60 to -50)  
+    else if (rssi >= -70) strength = 2; // Fair: 2 bars, red-orange (-70 to -60)
+    else if (rssi >= -80) strength = 1; // Poor: 1 bar, red (-80 to -70)
+    else strength = 0;                  // Very poor: dim bars (below -80)
+    
+    const colorMap = {
+        5: 'GREEN',
+        4: 'YELLOW-GREEN', 
+        3: 'YELLOW-ORANGE',
+        2: 'RED-ORANGE',
+        1: 'RED',
+        0: 'DIM RED'
+    };
+    
+    console.log('📶 RSSI:', rssi, '→ Strength:', strength, '→ Expected color:', colorMap[strength]);
+    
+    return '<div class="signal-strength strength-' + strength + '">' +
+           '<span class="bar bar-1"></span>' +
+           '<span class="bar bar-2"></span>' +
+           '<span class="bar bar-3"></span>' +
+           '<span class="bar bar-4"></span>' +
+           '<span class="bar bar-5"></span>' +
+           '</div>';
+}
+
 function updateNetworks(networks, isScanning = false) {
     console.log('🔄 Updating networks UI with data:', networks, 'isScanning:', isScanning);
     const networksEl = document.getElementById('networks');
@@ -275,7 +313,8 @@ function updateNetworks(networks, isScanning = false) {
     let html = '<div class="network-list">';
     networks.forEach(network => {
         const securityIcon = network.secure ? '🔒' : '🔓';
-        let signalStrength = network.signal_strength || '📶';
+        // Use CSS signal strength indicator instead of emoji
+        const signalStrength = createSignalStrengthIndicator(network.rssi || network.signal_strength || -70);
         
         html += '<div class="network-item" onclick="selectNetwork(\'' + 
                 network.ssid.replace(/'/g, "\\'") + '\')">';
@@ -286,6 +325,39 @@ function updateNetworks(networks, isScanning = false) {
     html += '</div>';
     networksEl.innerHTML = html;
     console.log('✅ Networks UI updated successfully');
+}
+
+function selectNetwork(ssid) {
+    console.log('🔗 Network selected:', ssid);
+    
+    // Fill in the SSID field
+    const ssidInput = document.getElementById('ssid');
+    if (ssidInput) {
+        ssidInput.value = ssid;
+    }
+    
+    // Show the manual connection form
+    const manualForm = document.getElementById('manualConnectForm');
+    const toggleBtn = document.getElementById('manualToggleBtn');
+    const networksList = document.getElementById('networks');
+    
+    if (manualForm && manualForm.style.display === 'none') {
+        manualForm.style.display = 'block';
+        if (toggleBtn) toggleBtn.textContent = 'Hide Manual Entry';
+        if (networksList) networksList.style.display = 'none';
+    }
+    
+    // Focus the password input after a brief delay to ensure the form is visible
+    setTimeout(() => {
+        const passwordInput = document.getElementById('password');
+        if (passwordInput) {
+            passwordInput.focus();
+            console.log('🎯 Password field focused');
+        }
+    }, 100);
+    
+    // Update status
+    updateStatus('ready', 'Enter password for ' + ssid);
 }
 
 // Initialize
@@ -332,9 +404,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
 });
 
-function loadInitialNetworks() {
-    console.log('🔄 Loading initial networks from /networks.json...');
-    // Fetch networks.json to get the initial list from server-side scanning
+function loadNetworksFromAPI() {
+    console.log('🔄 Loading networks from API...');
+    
     fetch('/networks.json')
         .then(response => {
             console.log('📡 networks.json response status:', response.status);
@@ -342,17 +414,52 @@ function loadInitialNetworks() {
         })
         .then(data => {
             console.log('📋 networks.json data received:', data);
+            
             if (data.networks && data.networks.length > 0) {
                 console.log('✅ Found', data.networks.length, 'networks, updating UI...');
                 updateNetworks(data.networks);
-                updateStatus('ready', 'Select a network or enter manually');
+                if (!scanInProgress) {
+                    updateStatus('ready', 'Select a network or enter manually');
+                }
             } else {
-                console.log('ℹ️ No networks found in initial data');
-                updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+                console.log('ℹ️ No networks found');
+                updateNetworks([]);
+                if (!scanInProgress) {
+                    updateStatus('ready', 'No networks found. Try scanning again.');
+                }
             }
         })
         .catch(error => {
-            console.log('❌ Error loading initial networks:', error);
-            updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+            console.log('❌ Error loading networks from API:', error);
+            if (!scanInProgress) {
+                updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+            }
+        });
+}
+
+function loadInitialNetworks() {
+    console.log('🔄 Loading initial networks and status...');
+    
+    // First check status to see if scan is in progress
+    fetch('/status')
+        .then(response => response.json())
+        .then(statusData => {
+            console.log('📊 Status data received:', statusData);
+            
+            if (statusData.scan_in_progress) {
+                console.log('🔄 Scan is in progress, showing scan state...');
+                scanInProgress = true;
+                updateScanButton(true);
+                updateStatus('scanning', 'Scanning for networks...');
+            }
+            
+            // Load networks from API
+            loadNetworksFromAPI();
+        })
+        .catch(error => {
+            console.log('❌ Error loading initial data:', error);
+            if (!scanInProgress) {
+                updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+            }
         });
 }

@@ -7,6 +7,10 @@
 #include <functional>
 #include "StorageManager.h"
 
+#ifdef FLEXIFI_MDNS
+#include <ESPmDNS.h>
+#endif
+
 // Forward declarations
 class PortalWebServer;
 class StorageManager;
@@ -34,6 +38,14 @@ struct WiFiProfile;
 
 #ifndef FLEXIFI_PORTAL_TIMEOUT
 #define FLEXIFI_PORTAL_TIMEOUT 300000
+#endif
+
+#ifndef FLEXIFI_SCAN_THROTTLE_TIME
+#define FLEXIFI_SCAN_THROTTLE_TIME 5000
+#endif
+
+#ifndef FLEXIFI_PASSWORD_LOG_INTERVAL
+#define FLEXIFI_PASSWORD_LOG_INTERVAL 30000
 #endif
 
 // Logging macros
@@ -78,7 +90,7 @@ enum class WiFiState {
 
 class Flexifi {
 public:
-    Flexifi(AsyncWebServer* server);
+    Flexifi(AsyncWebServer* server, bool generatePassword = false);
     ~Flexifi();
     
     // Initialization
@@ -91,16 +103,23 @@ public:
     void setPortalTimeout(unsigned long timeout);
     void setConnectTimeout(unsigned long timeout);
 
+    // mDNS configuration (requires FLEXIFI_MDNS define and ESPmDNS library)
+    void setMDNSHostname(const String& hostname);
+    String getMDNSHostname() const;
+    bool isMDNSEnabled() const;
+
     // Portal management
     bool startPortal(const String& apName, const String& apPassword = "");
     void stopPortal();
     bool isPortalActive() const;
     PortalState getPortalState() const;
+    String getGeneratedPassword() const;
 
     // Storage management
     bool saveConfig();
     bool loadConfig();
     void clearConfig();
+    bool retryStorageInit();
     
     // WiFi profile management
     bool addWiFiProfile(const String& ssid, const String& password, int priority = 50);
@@ -108,7 +127,7 @@ public:
     bool deleteWiFiProfile(const String& ssid);
     bool hasWiFiProfile(const String& ssid);
     void clearAllWiFiProfiles();
-    int getWiFiProfileCount();
+    int getWiFiProfileCount() const;
     String getWiFiProfilesJSON() const;
     
     // Auto-connect functionality
@@ -129,7 +148,7 @@ public:
     String getParametersHTML() const;
 
     // Network management
-    bool scanNetworks(); // Returns true if scan started, false if throttled
+    bool scanNetworks(bool bypassThrottle = false); // Returns true if scan started, false if throttled
     String getNetworksJSON() const;
     unsigned long getScanTimeRemaining() const; // Returns ms until next scan allowed
     bool connectToWiFi(const String& ssid, const String& password);
@@ -168,6 +187,8 @@ private:
     String _currentPassword;
     String _apName;
     String _apPassword;
+    String _generatedPassword;
+    bool _useGeneratedPassword;
     
     // Profile management
     bool _autoConnectEnabled;
@@ -176,6 +197,7 @@ private:
     bool _autoConnectLimitReachedLogged;
     static const int MAX_AUTO_CONNECT_RETRIES = 3;
     static const unsigned long AUTO_CONNECT_RETRY_DELAY = 30000;
+    static const unsigned long STORAGE_RETRY_DELAY = 60000; // Retry storage every 60 seconds
 
     // Timing
     unsigned long _portalTimeout;
@@ -183,11 +205,19 @@ private:
     unsigned long _portalStartTime;
     unsigned long _connectStartTime;
     unsigned long _lastScanTime;
+    unsigned long _lastStorageRetry;
 
     // Network data
     int _networkCount;
     String _networksJSON;
     int _minSignalQuality;
+
+    // mDNS configuration
+    String _mdnsHostname;
+    bool _mdnsStarted;
+    
+    // Scan tracking
+    bool _scanInProgress;
 
     // Custom parameters
     FlexifiParameter** _parameters;
@@ -225,6 +255,9 @@ private:
     void _clearParameters();
     int _findParameterIndex(const String& id) const;
     bool _addParameterToArray(FlexifiParameter* parameter);
+    void _saveParameterValues();
+    void _loadParameterValues();
+    void _loadParameterValue(FlexifiParameter* parameter);
     
     // Network filtering
     bool _networkMeetsQuality(int rssi) const;
@@ -240,6 +273,13 @@ private:
     bool _connectToHighestPriorityNetwork();
     void _updateProfilePriorities();
     String _formatProfilesJSON(const std::vector<WiFiProfile>& profiles) const;
+
+    // mDNS helpers
+    bool _startMDNS();
+    void _stopMDNS();
+    
+    // Password generation helpers
+    String _generatePassword(int length = 8);
 };
 
 #endif // FLEXIFI_H

@@ -16,522 +16,35 @@ namespace FlexifiAssets {
 
     // HTML Templates
 
-// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/templates/modern.html (minified: 2258 bytes)
-const char template_modern[] PROGMEM = R"FLEXIFI(<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{TITLE}}</title>
-    <style>{{CSS_MODERN}}</style>
-    <link rel="stylesheet" href="/src/web/css/modern.css">
-    <script src="/src/web/js/portal.js"></script>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>{{TITLE}}</h1>
-            <p class="subtitle">Configure your WiFi connection</p>
-        </div>
-
-        <div class="status-panel">
-            <div id="status">{{STATUS}}</div>
-        </div>
-
-        <div class="wifi-panel">
-            <div class="networks-header">
-                <h2>Available Networks</h2>
-                <div class="button-group">
-                    <button id="manualToggleBtn" class="btn btn-secondary btn-compact">Enter Manually</button>
-                    <button id="scanBtn" class="btn btn-secondary btn-compact">
-                        <span id="scanBtnText">Scan</span>
-                        <span id="scanSpinner" class="spinner" style="display: none;">⟳</span>
-                    </button>
-                    <button id="resetBtn" class="btn btn-danger btn-compact">Reset Configuration</button>
-                </div>
-            </div>
-            <div id="networks" class="networks">{{NETWORKS}}</div>
-        </div>
-
-        <div class="connect-panel">
-            <div id="manualConnectForm" class="manual-form" style="display: none;">
-                <h3>Manual Connection</h3>
-                <form id="connectForm">
-                    <div class="form-group">
-                        <label for="ssid">Network Name (SSID):</label>
-                        <input type="text" id="ssid" name="ssid" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password:</label>
-                        <input type="password" id="password" name="password">
-                    </div>
-                    {{CUSTOM_PARAMETERS}}
-                    <button type="submit" class="btn btn-primary btn-compact">Connect</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <script>{{JS_PORTAL}}</script>
-</body>
-</html>
-)FLEXIFI";
+// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/templates/modern.html (minified: 1338 bytes)
+const char template_modern[] PROGMEM = R"FLEXIFI(<!doctype html><html lang=en><meta charset=UTF-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>{{TITLE}}</title><style>{{CSS_MODERN}}</style><body><div class=container><div class=header><h1>{{TITLE}}</h1><p class=subtitle>Configure your WiFi connection</div><div class=status-panel><div id=status>{{STATUS}}</div></div><div class=wifi-panel><div class=networks-header><h2>Available Networks</h2><div class=button-group><button class="btn btn-secondary btn-compact" id=manualToggleBtn>Enter Manually</button><button class="btn btn-secondary btn-compact" id=scanBtn><span id=scanBtnText>Scan</span> <span class=spinner id=scanSpinner style=display:none>⟳</span></button><button class="btn btn-danger btn-compact" id=resetBtn>Reset Configuration</button></div></div><div class=networks id=networks>{{NETWORKS}}</div></div><div class=connect-panel><div class=manual-form id=manualConnectForm style=display:none><h3>Manual Connection</h3><form id=connectForm><div class=form-group><label for=ssid>Network Name (SSID):</label><input id=ssid name=ssid required></div><div class=form-group><label for=password>Password:</label><input id=password name=password type=password></div> {{CUSTOM_PARAMETERS}} <button class="btn btn-primary btn-compact">Connect</button></form></div></div></div><script>{{JS_PORTAL}}</script>)FLEXIFI";
 const size_t template_modern_len = sizeof(template_modern) - 1;
 
-// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/templates/classic.html (minified: 1329 bytes)
-const char template_classic[] PROGMEM = R"FLEXIFI(<!DOCTYPE html>
-<html>
-<head>
-    <title>{{TITLE}}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>{{CSS_CLASSIC}}</style>
-</head>
-<body>
-    <div class="container">
-        <h1>{{TITLE}}</h1>
-        
-        <div class="panel">
-            <h2>Status</h2>
-            <div id="status">{{STATUS}}</div>
-        </div>
-        
-        <div class="panel">
-            <h2>WiFi Networks</h2>
-            <button onclick="scanNetworks()">Scan</button>
-            <div id="networks">{{NETWORKS}}</div>
-        </div>
-        
-        <div class="panel">
-            <h2>Connect</h2>
-            <form onsubmit="connectToWiFi(); return false;">
-                <p>
-                    <label>SSID:</label><br>
-                    <input type="text" id="ssid" required>
-                </p>
-                <p>
-                    <label>Password:</label><br>
-                    <input type="password" id="password">
-                </p>
-                {{CUSTOM_PARAMETERS}}
-                <p>
-                    <button type="submit">Connect</button>
-                </p>
-            </form>
-        </div>
-        
-        <div class="panel">
-            <button onclick="resetConfig()">Reset</button>
-        </div>
-    </div>
-    
-    <script>{{JS_PORTAL}}</script>
-</body>
-</html>)FLEXIFI";
+// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/templates/classic.html (minified: 740 bytes)
+const char template_classic[] PROGMEM = R"FLEXIFI(<!doctype html><title>{{TITLE}}</title><meta content="width=device-width,initial-scale=1" name=viewport><style>{{CSS_CLASSIC}}</style><body><div class=container><h1>{{TITLE}}</h1><div class=panel><h2>Status</h2><div id=status>{{STATUS}}</div></div><div class=panel><h2>WiFi Networks</h2><button onclick=scanNetworks()>Scan</button><div id=networks>{{NETWORKS}}</div></div><div class=panel><h2>Connect</h2><form onsubmit="connectToWiFi(); return false;"><p><label>SSID:</label><br> <input id=ssid required><p><label>Password:</label><br> <input id=password type=password></p> {{CUSTOM_PARAMETERS}} <p><button>Connect</button></form></div><div class=panel><button onclick=resetConfig()>Reset</button></div></div><script>{{JS_PORTAL}}</script>)FLEXIFI";
 const size_t template_classic_len = sizeof(template_classic) - 1;
 
-// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/templates/minimal.html (minified: 696 bytes)
-const char template_minimal[] PROGMEM = R"FLEXIFI(<!DOCTYPE html>
-<html>
-<head>
-    <title>{{TITLE}}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>{{CSS_MINIMAL}}</style>
-</head>
-<body>
-    <h1>{{TITLE}}</h1>
-    <div id="status">{{STATUS}}</div>
-    <button onclick="scanNetworks()">Scan</button>
-    <div id="networks">{{NETWORKS}}</div>
-    <form onsubmit="connectToWiFi(); return false;">
-        SSID: <input type="text" id="ssid" required><br>
-        Password: <input type="password" id="password"><br>
-        {{CUSTOM_PARAMETERS}}
-        <button type="submit">Connect</button>
-    </form>
-    <button onclick="resetConfig()">Reset</button>
-    <script>{{JS_PORTAL}}</script>
-</body>
-</html>)FLEXIFI";
+// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/templates/minimal.html (minified: 526 bytes)
+const char template_minimal[] PROGMEM = R"FLEXIFI(<!doctype html><title>{{TITLE}}</title><meta content="width=device-width,initial-scale=1" name=viewport><style>{{CSS_MINIMAL}}</style><body><h1>{{TITLE}}</h1><div id=status>{{STATUS}}</div><button onclick=scanNetworks()>Scan</button><div id=networks>{{NETWORKS}}</div><form onsubmit="connectToWiFi(); return false;">SSID: <input id=ssid required><br> Password: <input id=password type=password><br> {{CUSTOM_PARAMETERS}} <button>Connect</button></form><button onclick=resetConfig()>Reset</button><script>{{JS_PORTAL}}</script>)FLEXIFI";
 const size_t template_minimal_len = sizeof(template_minimal) - 1;
 
     // CSS Stylesheets
 
-// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/css/classic.css (minified: 1149 bytes)
-const char css_classic[] PROGMEM = R"FLEXIFI(body { 
-    font-family: Arial, sans-serif; 
-    margin: 0; 
-    padding: 20px; 
-    background: #f5f5f5; 
-}
-
-.container { 
-    max-width: 600px; 
-    margin: 0 auto; 
-    background: white; 
-    padding: 20px; 
-    border-radius: 5px; 
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-}
-
-h1 { 
-    color: #333; 
-    text-align: center; 
-}
-
-h2 { 
-    color: #666; 
-    border-bottom: 2px solid #eee; 
-    padding-bottom: 10px; 
-}
-
-.panel { 
-    margin-bottom: 20px; 
-    padding: 15px; 
-    border: 1px solid #ddd; 
-    border-radius: 5px; 
-}
-
-button { 
-    padding: 10px 20px; 
-    background: #007cba; 
-    color: white; 
-    border: none; 
-    border-radius: 3px; 
-    cursor: pointer; 
-}
-
-button:hover { 
-    background: #005a8b; 
-}
-
-input, select, textarea { 
-    padding: 8px; 
-    margin: 5px 0; 
-    border: 1px solid #ddd; 
-    border-radius: 3px; 
-}
-
-#status { 
-    padding: 10px; 
-    margin: 10px 0; 
-    border-radius: 3px; 
-    background: #f0f0f0; 
-}
-
-.network-item { 
-    padding: 10px; 
-    margin: 5px 0; 
-    border: 1px solid #eee; 
-    border-radius: 3px; 
-    cursor: pointer; 
-}
-
-.network-item:hover { 
-    background: #f9f9f9; 
-})FLEXIFI";
+// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/css/classic.css (minified: 794 bytes)
+const char css_classic[] PROGMEM = R"FLEXIFI(body{background:#f5f5f5;margin:0;padding:20px;font-family:Arial,sans-serif}.container{background:#fff;border-radius:5px;max-width:600px;margin:0 auto;padding:20px;box-shadow:0 2px 10px #0000001a}h1{color:#333;text-align:center}h2{color:#666;border-bottom:2px solid #eee;padding-bottom:10px}.panel{border:1px solid #ddd;border-radius:5px;margin-bottom:20px;padding:15px}button{color:#fff;cursor:pointer;background:#007cba;border:none;border-radius:3px;padding:10px 20px}button:hover{background:#005a8b}input,select,textarea{border:1px solid #ddd;border-radius:3px;margin:5px 0;padding:8px}#status{background:#f0f0f0;border-radius:3px;margin:10px 0;padding:10px}.network-item{cursor:pointer;border:1px solid #eee;border-radius:3px;margin:5px 0;padding:10px}.network-item:hover{background:#f9f9f9})FLEXIFI";
 const size_t css_classic_len = sizeof(css_classic) - 1;
 
-// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/css/minimal.css (minified: 427 bytes)
-const char css_minimal[] PROGMEM = R"FLEXIFI(body { 
-    font-family: Arial, sans-serif; 
-    margin: 20px; 
-}
-
-button { 
-    padding: 5px 10px; 
-    margin: 5px; 
-}
-
-input, select, textarea { 
-    padding: 5px; 
-    margin: 2px; 
-}
-
-#status { 
-    padding: 5px; 
-    margin: 10px 0; 
-    background: #f0f0f0; 
-}
-
-.network-item { 
-    padding: 5px; 
-    margin: 2px; 
-    border: 1px solid #ccc; 
-    cursor: pointer; 
-}
-
-.network-item:hover { 
-    background: #f5f5f5; 
-})FLEXIFI";
+// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/css/minimal.css (minified: 292 bytes)
+const char css_minimal[] PROGMEM = R"FLEXIFI(body{margin:20px;font-family:Arial,sans-serif}button{margin:5px;padding:5px 10px}input,select,textarea{margin:2px;padding:5px}#status{background:#f0f0f0;margin:10px 0;padding:5px}.network-item{cursor:pointer;border:1px solid #ccc;margin:2px;padding:5px}.network-item:hover{background:#f5f5f5})FLEXIFI";
 const size_t css_minimal_len = sizeof(css_minimal) - 1;
 
-// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/css/modern.css (minified: 4409 bytes)
-const char css_modern[] PROGMEM = R"FLEXIFI(* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    padding: 10px; /* Reduced for captive portal */
-}
-
-.container {
-    max-width: 600px;
-    margin: 0 auto;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    overflow: hidden;
-}
-
-.header {
-    background: #4a5568;
-    color: white;
-    padding: 15px; /* Reduced padding */
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.header h1 {
-    font-size: 1.5em; /* Smaller title */
-    margin-bottom: 0; /* No margin for inline layout */
-}
-
-.subtitle {
-    opacity: 0.9;
-}
-
-.status-panel, .wifi-panel, .connect-panel, .actions {
-    padding: 12px; /* Further reduced padding for compact layout */
-}
-
-.status-panel {
-    padding: 8px 12px; /* Minimal padding for status */
-}
-
-.status {
-    padding: 15px;
-    border-radius: 8px;
-    font-weight: 500;
-}
-
-.status.ready {
-    background: #e6fffa;
-    color: #065f46;
-}
-
-.status.scanning {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.status.connecting {
-    background: #dbeafe;
-    color: #1e40af;
-}
-
-.status.connected {
-    background: #dcfce7;
-    color: #166534;
-}
-
-.status.failed {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.status.error {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.status.throttled {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.btn {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.btn-primary {
-    background: #3b82f6;
-    color: white;
-}
-
-.btn-primary:hover {
-    background: #2563eb;
-}
-
-.btn-secondary {
-    background: #6b7280;
-    color: white;
-}
-
-.btn-secondary:hover {
-    background: #4b5563;
-}
-
-.btn-danger {
-    background: #ef4444;
-    color: white;
-}
-
-.btn-danger:hover {
-    background: #dc2626;
-}
-
-.form-group {
-    margin-bottom: 10px; /* More compact spacing */
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.form-group label {
-    min-width: 120px; /* Fixed width for alignment */
-    margin-bottom: 0;
-    font-weight: 500;
-    flex-shrink: 0; /* Prevent label from shrinking */
-}
-
-.form-group input, .form-group select, .form-group textarea {
-    flex: 1; /* Take remaining space */
-    padding: 10px; /* Reduced padding for compactness */
-    border: 2px solid #e5e7eb;
-    border-radius: 6px;
-    font-size: 16px;
-}
-
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-    outline: none;
-    border-color: #3b82f6;
-}
-
-.network-list {
-    margin-top: 15px;
-}
-
-.network-item {
-    padding: 12px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    margin-bottom: 8px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.network-item:hover {
-    background: #f9fafb;
-}
-
-.network-name {
-    font-weight: 500;
-}
-
-.network-info {
-    color: #6b7280;
-}
-
-.actions {
-    text-align: center;
-}
-
-.required {
-    color: #dc2626;
-}
-
-/* Manual connect toggle */
-.manual-connect-toggle {
-    text-align: center;
-    margin-bottom: 10px;
-}
-
-.manual-form {
-    padding-top: 0px; /* Compact spacing */
-}
-
-.manual-form h3 {
-    margin-bottom: 8px; /* Reduced spacing */
-    color: #374151;
-    font-size: 1.0em; /* Smaller font */
-}
-
-/* Scan button spinner */
-.spinner {
-    display: inline-block;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-/* Compact network list for captive portal */
-.network-item {
-    padding: 8px 12px; /* Reduced padding */
-}
-
-/* Reduce heading sizes for compact layout */
-h2 {
-    font-size: 1.2em;
-    margin-bottom: 10px;
-}
-
-/* Networks header with inline scan button */
-.networks-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.networks-header h2 {
-    margin-bottom: 0;
-    flex-grow: 1;
-}
-
-/* Compact scan button */
-.btn-compact {
-    padding: 8px 16px;
-    font-size: 13px;
-    min-width: 60px;
-}
-
-/* Button group layout */
-.button-group {
-    display: flex;
-    gap: 8px;
-}
-
-.button-group .btn {
-    margin: 0;
-}
-)FLEXIFI";
+// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/css/modern.css (minified: 4825 bytes)
+const char css_modern[] PROGMEM = R"FLEXIFI(*{box-sizing:border-box;margin:0;padding:0}body{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:10px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif}.container{background:#fff;border-radius:12px;max-width:600px;margin:0 auto;overflow:hidden;box-shadow:0 10px 30px #0003}.header{color:#fff;background:#4a5568;justify-content:space-between;align-items:center;padding:15px;display:flex}.header h1{margin-bottom:0;font-size:1.5em}.subtitle{opacity:.9}.status-panel,.wifi-panel,.connect-panel,.actions{padding:12px}.status-panel{padding:8px 12px}.status{border-radius:8px;padding:15px;font-weight:500}.status.ready{color:#065f46;background:#e6fffa}.status.scanning{color:#92400e;background:#fef3c7}.status.connecting{color:#1e40af;background:#dbeafe}.status.connected{color:#166534;background:#dcfce7}.status.failed,.status.error{color:#dc2626;background:#fee2e2}.status.throttled{color:#92400e;background:#fef3c7}.btn{cursor:pointer;border:none;border-radius:6px;padding:12px 24px;font-size:14px;font-weight:500;transition:all .2s}.btn-primary{color:#fff;background:#3b82f6}.btn-primary:hover{background:#2563eb}.btn-secondary{color:#fff;background:#6b7280}.btn-secondary:hover{background:#4b5563}.btn-danger{color:#fff;background:#ef4444}.btn-danger:hover{background:#dc2626}.form-group{align-items:center;gap:12px;margin-bottom:10px;display:flex}.form-group label{flex-shrink:0;min-width:120px;margin-bottom:0;font-weight:500}.form-group input,.form-group select,.form-group textarea{border:2px solid #e5e7eb;border-radius:6px;flex:1;padding:10px;font-size:16px}.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#3b82f6;outline:none}.network-list{margin-top:15px}.network-item{cursor:pointer;border:1px solid #e5e7eb;border-radius:6px;justify-content:space-between;align-items:center;margin-bottom:8px;padding:12px;display:flex}.network-item:hover{background:#f9fafb}.network-name{font-weight:500}.network-info{color:#6b7280}.actions{text-align:center}.required{color:#dc2626}.manual-connect-toggle{text-align:center;margin-bottom:10px}.manual-form{padding-top:0}.manual-form h3{color:#374151;margin-bottom:8px;font-size:1em}.spinner{animation:1s linear infinite spin;display:inline-block}@keyframes spin{0%{transform:rotate(0)}to{transform:rotate(360deg)}}.btn:disabled{opacity:.6;cursor:not-allowed}.network-item{padding:8px 12px}h2{margin-bottom:10px;font-size:1.2em}.networks-header{justify-content:space-between;align-items:center;margin-bottom:12px;display:flex}.networks-header h2{flex-grow:1;margin-bottom:0}.btn-compact{min-width:60px;padding:8px 16px;font-size:13px}.button-group{gap:8px;display:flex}.button-group .btn{margin:0}.signal-strength{vertical-align:middle;justify-content:flex-end;align-items:flex-end;width:auto;height:20px;margin:0;padding:2px;display:inline-flex}.signal-strength .bar{transform-origin:100% 100%;opacity:.3;background-color:#707070;border-radius:2px;width:4px;margin-left:2px;transition:all .3s cubic-bezier(.17,.67,.42,1.3);display:inline-block}.signal-strength .bar-1{height:20%}.signal-strength .bar-2{height:40%}.signal-strength .bar-3{height:60%}.signal-strength .bar-4{height:80%}.signal-strength .bar-5{height:100%}.signal-strength.strength-0 .bar{opacity:.2;background:#ef4444}.signal-strength.strength-1 .bar-1{opacity:1;background:#dc2626}.signal-strength.strength-1 .bar-2,.signal-strength.strength-1 .bar-3,.signal-strength.strength-1 .bar-4,.signal-strength.strength-1 .bar-5{opacity:.2;background:#707070}.signal-strength.strength-2 .bar-1,.signal-strength.strength-2 .bar-2{opacity:1;background:#ea580c}.signal-strength.strength-2 .bar-3,.signal-strength.strength-2 .bar-4,.signal-strength.strength-2 .bar-5{opacity:.2;background:#707070}.signal-strength.strength-3 .bar-1,.signal-strength.strength-3 .bar-2,.signal-strength.strength-3 .bar-3{opacity:1;background:#ca8a04}.signal-strength.strength-3 .bar-4,.signal-strength.strength-3 .bar-5{opacity:.2;background:#707070}.signal-strength.strength-4 .bar-1,.signal-strength.strength-4 .bar-2,.signal-strength.strength-4 .bar-3,.signal-strength.strength-4 .bar-4{opacity:1;background:#65a30d}.signal-strength.strength-4 .bar-5{opacity:.2;background:#707070}.signal-strength.strength-5 .bar-1,.signal-strength.strength-5 .bar-2,.signal-strength.strength-5 .bar-3,.signal-strength.strength-5 .bar-4,.signal-strength.strength-5 .bar-5{opacity:1;background:#16a34a}@keyframes signal-intro{0%{transform:scaleY(.3)}to{transform:scaleY(1)}}.signal-strength .bar{animation:.3s ease-out forwards signal-intro}.signal-strength .bar-1{animation-delay:50ms}.signal-strength .bar-2{animation-delay:.1s}.signal-strength .bar-3{animation-delay:.15s}.signal-strength .bar-4{animation-delay:.2s}.signal-strength .bar-5{animation-delay:.25s})FLEXIFI";
 const size_t css_modern_len = sizeof(css_modern) - 1;
 
     // JavaScript Files
 
-// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/js/portal.js (minified: 13475 bytes)
+// Generated from: /Users/andy/GitHub/andyshinn/flexifi/src/web/js/portal.js (minified: 17578 bytes)
 const char js_portal[] PROGMEM = R"FLEXIFI(let ws = null;
 let scanInProgress = false;
 
@@ -564,7 +77,14 @@ function handleWebSocketMessage(data) {
         console.log('📥 WebSocket message received:', msg);
         
         if (msg.type === 'scan_complete') {
-            updateNetworks(msg.data.networks);
+            if (msg.data.refresh_networks) {
+                // New approach: refresh networks from API instead of receiving via WebSocket
+                console.log('🔄 Received refresh signal, fetching networks from API...');
+                loadNetworksFromAPI();
+            } else if (msg.data.networks) {
+                // Legacy fallback for direct network data
+                updateNetworks(msg.data.networks);
+            }
             scanInProgress = false;
             updateScanButton(false); // Re-enable scan button
         } else if (msg.type === 'status_update') {
@@ -587,7 +107,7 @@ function handleWebSocketMessage(data) {
                 } else {
                     updateStatus('error', msg.message || 'Scan failed');
                 }
-                updateNetworks([]); // Clear networks
+                // Don't clear networks on scan failure - preserve existing results
             }
         }
     } catch (e) {
@@ -638,11 +158,11 @@ function scanNetworks() {
                     // Handle throttled response
                     console.log('⏳ Scan throttled:', data.message);
                     updateStatus('throttled', data.message);
-                    updateNetworks([]); // Show empty networks but not scanning
+                    // Don't clear networks when throttled - preserve existing results
                 } else {
                     console.log('⚠️ Scan response missing data or failed');
                     updateStatus('error', data.message || 'Scan failed');
-                    updateNetworks([]);
+                    // Don't clear networks on error - preserve existing results
                 }
             })
             .catch(error => {
@@ -650,7 +170,7 @@ function scanNetworks() {
                 scanInProgress = false;
                 updateScanButton(false); // Re-enable button
                 updateStatus('error', 'Scan failed. Please try again.');
-                updateNetworks([]); // Clear networks
+                // Don't clear networks on error - preserve existing results
             });
     }
 }
@@ -777,6 +297,37 @@ function getStatusMessage(status) {
     }
 }
 
+function createSignalStrengthIndicator(rssi) {
+    // Convert RSSI to signal strength (0-5 bars) with granular WiFi ranges
+    // 5-bar system provides more detailed signal quality representation
+    let strength = 0;
+    if (rssi >= -30) strength = 5;      // Exceptional: 5 bars, green (-30 and above)
+    else if (rssi >= -50) strength = 4; // Excellent: 4 bars, yellow-green (-50 to -30)
+    else if (rssi >= -60) strength = 3; // Good: 3 bars, yellow-orange (-60 to -50)  
+    else if (rssi >= -70) strength = 2; // Fair: 2 bars, red-orange (-70 to -60)
+    else if (rssi >= -80) strength = 1; // Poor: 1 bar, red (-80 to -70)
+    else strength = 0;                  // Very poor: dim bars (below -80)
+    
+    const colorMap = {
+        5: 'GREEN',
+        4: 'YELLOW-GREEN', 
+        3: 'YELLOW-ORANGE',
+        2: 'RED-ORANGE',
+        1: 'RED',
+        0: 'DIM RED'
+    };
+    
+    console.log('📶 RSSI:', rssi, '→ Strength:', strength, '→ Expected color:', colorMap[strength]);
+    
+    return '<div class="signal-strength strength-' + strength + '">' +
+           '<span class="bar bar-1"></span>' +
+           '<span class="bar bar-2"></span>' +
+           '<span class="bar bar-3"></span>' +
+           '<span class="bar bar-4"></span>' +
+           '<span class="bar bar-5"></span>' +
+           '</div>';
+}
+
 function updateNetworks(networks, isScanning = false) {
     console.log('🔄 Updating networks UI with data:', networks, 'isScanning:', isScanning);
     const networksEl = document.getElementById('networks');
@@ -809,7 +360,8 @@ function updateNetworks(networks, isScanning = false) {
     let html = '<div class="network-list">';
     networks.forEach(network => {
         const securityIcon = network.secure ? '🔒' : '🔓';
-        let signalStrength = network.signal_strength || '📶';
+        // Use CSS signal strength indicator instead of emoji
+        const signalStrength = createSignalStrengthIndicator(network.rssi || network.signal_strength || -70);
         
         html += '<div class="network-item" onclick="selectNetwork(\'' + 
                 network.ssid.replace(/'/g, "\\'") + '\')">';
@@ -820,6 +372,39 @@ function updateNetworks(networks, isScanning = false) {
     html += '</div>';
     networksEl.innerHTML = html;
     console.log('✅ Networks UI updated successfully');
+}
+
+function selectNetwork(ssid) {
+    console.log('🔗 Network selected:', ssid);
+    
+    // Fill in the SSID field
+    const ssidInput = document.getElementById('ssid');
+    if (ssidInput) {
+        ssidInput.value = ssid;
+    }
+    
+    // Show the manual connection form
+    const manualForm = document.getElementById('manualConnectForm');
+    const toggleBtn = document.getElementById('manualToggleBtn');
+    const networksList = document.getElementById('networks');
+    
+    if (manualForm && manualForm.style.display === 'none') {
+        manualForm.style.display = 'block';
+        if (toggleBtn) toggleBtn.textContent = 'Hide Manual Entry';
+        if (networksList) networksList.style.display = 'none';
+    }
+    
+    // Focus the password input after a brief delay to ensure the form is visible
+    setTimeout(() => {
+        const passwordInput = document.getElementById('password');
+        if (passwordInput) {
+            passwordInput.focus();
+            console.log('🎯 Password field focused');
+        }
+    }, 100);
+    
+    // Update status
+    updateStatus('ready', 'Enter password for ' + ssid);
 }
 
 // Initialize
@@ -866,9 +451,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
 });
 
-function loadInitialNetworks() {
-    console.log('🔄 Loading initial networks from /networks.json...');
-    // Fetch networks.json to get the initial list from server-side scanning
+function loadNetworksFromAPI() {
+    console.log('🔄 Loading networks from API...');
+    
     fetch('/networks.json')
         .then(response => {
             console.log('📡 networks.json response status:', response.status);
@@ -876,18 +461,53 @@ function loadInitialNetworks() {
         })
         .then(data => {
             console.log('📋 networks.json data received:', data);
+            
             if (data.networks && data.networks.length > 0) {
                 console.log('✅ Found', data.networks.length, 'networks, updating UI...');
                 updateNetworks(data.networks);
-                updateStatus('ready', 'Select a network or enter manually');
+                if (!scanInProgress) {
+                    updateStatus('ready', 'Select a network or enter manually');
+                }
             } else {
-                console.log('ℹ️ No networks found in initial data');
-                updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+                console.log('ℹ️ No networks found');
+                updateNetworks([]);
+                if (!scanInProgress) {
+                    updateStatus('ready', 'No networks found. Try scanning again.');
+                }
             }
         })
         .catch(error => {
-            console.log('❌ Error loading initial networks:', error);
-            updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+            console.log('❌ Error loading networks from API:', error);
+            if (!scanInProgress) {
+                updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+            }
+        });
+}
+
+function loadInitialNetworks() {
+    console.log('🔄 Loading initial networks and status...');
+    
+    // First check status to see if scan is in progress
+    fetch('/status')
+        .then(response => response.json())
+        .then(statusData => {
+            console.log('📊 Status data received:', statusData);
+            
+            if (statusData.scan_in_progress) {
+                console.log('🔄 Scan is in progress, showing scan state...');
+                scanInProgress = true;
+                updateScanButton(true);
+                updateStatus('scanning', 'Scanning for networks...');
+            }
+            
+            // Load networks from API
+            loadNetworksFromAPI();
+        })
+        .catch(error => {
+            console.log('❌ Error loading initial data:', error);
+            if (!scanInProgress) {
+                updateStatus('ready', 'Click "Scan Networks" to find WiFi networks');
+            }
         });
 })FLEXIFI";
 const size_t js_portal_len = sizeof(js_portal) - 1;

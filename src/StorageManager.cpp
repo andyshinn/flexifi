@@ -15,7 +15,8 @@ StorageManager::StorageManager() :
     _littleFSAvailable(false),
     _nvsAvailable(false),
     _preferLittleFS(true),
-    _cacheTime(0) {
+    _cacheTime(0),
+    _migrationInProgress(false) {
 }
 
 StorageManager::~StorageManager() {
@@ -122,13 +123,16 @@ bool StorageManager::loadCredentials(String& ssid, String& password) {
     // Fallback to NVS
 #ifndef FLEXIFI_DISABLE_NVS
     if (_nvsAvailable) {
-        String nvsSSID = _loadNVS(SSID_KEY);
-        String nvsPassword = _loadNVS(PASSWORD_KEY);
-        if (!nvsSSID.isEmpty()) {
-            ssid = nvsSSID;
-            password = nvsPassword;
-            FLEXIFI_LOGD("Credentials loaded from NVS");
-            return true;
+        // Check if keys exist before loading to avoid error logs
+        if (_existsNVS(SSID_KEY)) {
+            String nvsSSID = _loadNVS(SSID_KEY);
+            String nvsPassword = _loadNVS(PASSWORD_KEY);
+            if (!nvsSSID.isEmpty()) {
+                ssid = nvsSSID;
+                password = nvsPassword;
+                FLEXIFI_LOGD("Credentials loaded from NVS");
+                return true;
+            }
         }
     }
 #endif
@@ -241,9 +245,12 @@ String StorageManager::loadConfig(const String& key, const String& defaultValue)
     // Fallback to NVS
 #ifndef FLEXIFI_DISABLE_NVS
     if (_nvsAvailable) {
-        String value = _loadNVS(sanitizedKey, defaultValue);
-        if (value != defaultValue) {
-            return value;
+        // Check if key exists first to avoid "NOT_FOUND" errors in logs
+        if (_existsNVS(sanitizedKey)) {
+            String value = _loadNVS(sanitizedKey, defaultValue);
+            if (value != defaultValue) {
+                return value;
+            }
         }
     }
 #endif
@@ -490,9 +497,10 @@ bool StorageManager::deleteWiFiProfile(const String& ssid) {
 }
 
 std::vector<WiFiProfile> StorageManager::loadWiFiProfiles() {
-    // Check if we can use cached profiles
+    // Check if we can use cached profiles (cache works even for empty results)
     unsigned long now = millis();
-    if (!_cachedProfiles.empty() && (now - _cacheTime) < CACHE_DURATION) {
+    if (_cacheTime > 0 && (now - _cacheTime) < CACHE_DURATION) {
+        FLEXIFI_LOGD("Using cached WiFi profiles (%d profiles)", _cachedProfiles.size());
         return _cachedProfiles;
     }
     
@@ -520,15 +528,18 @@ std::vector<WiFiProfile> StorageManager::loadWiFiProfiles() {
     // Fallback to NVS
 #ifndef FLEXIFI_DISABLE_NVS
     if (_nvsAvailable) {
-        String encodedProfiles = _loadNVS(PROFILES_KEY);
-        if (!encodedProfiles.isEmpty()) {
-            profiles = _decodeProfiles(encodedProfiles);
-            if (!profiles.empty()) {
-                FLEXIFI_LOGD("Loaded %d WiFi profiles from NVS", profiles.size());
-                _sortProfilesByPriority(profiles);
-                _cachedProfiles = profiles;
-                _cacheTime = millis();
-                return profiles;
+        // Check if profiles key exists before loading to avoid error logs
+        if (_existsNVS(PROFILES_KEY)) {
+            String encodedProfiles = _loadNVS(PROFILES_KEY);
+            if (!encodedProfiles.isEmpty()) {
+                profiles = _decodeProfiles(encodedProfiles);
+                if (!profiles.empty()) {
+                    FLEXIFI_LOGD("Loaded %d WiFi profiles from NVS", profiles.size());
+                    _sortProfilesByPriority(profiles);
+                    _cachedProfiles = profiles;
+                    _cacheTime = millis();
+                    return profiles;
+                }
             }
         }
     }
@@ -551,19 +562,23 @@ std::vector<WiFiProfile> StorageManager::loadWiFiProfiles() {
 #endif
     }
     
-    // Check for legacy single credential and migrate
+    // Check for legacy single credential and migrate (prevent infinite recursion)
     String legacySSID, legacyPassword;
-    if (loadCredentials(legacySSID, legacyPassword)) {
+    if (!_migrationInProgress && loadCredentials(legacySSID, legacyPassword)) {
         FLEXIFI_LOGI("Migrating legacy credentials to profile system");
+        _migrationInProgress = true; // Prevent recursion
+        
         WiFiProfile legacyProfile(legacySSID, legacyPassword, 100); // High priority
         legacyProfile.lastUsed = millis();
         profiles.push_back(legacyProfile);
         
-        // Save migrated profile
-        if (saveWiFiProfile(legacyProfile)) {
+        // Save migrated profile directly without recursion
+        if (_saveWiFiProfileDirect(legacyProfile)) {
             FLEXIFI_LOGD("Legacy credentials migrated successfully");
             clearCredentials(); // Remove legacy credentials
         }
+        
+        _migrationInProgress = false; // Reset flag
     }
     
     FLEXIFI_LOGD("Loaded %d WiFi profiles total", profiles.size());
@@ -597,6 +612,13 @@ bool StorageManager::hasWiFiProfile(const String& ssid) {
 }
 
 void StorageManager::clearAllWiFiProfiles() {
+    // Check if any profiles exist before clearing
+    std::vector<WiFiProfile> existingProfiles = loadWiFiProfiles();
+    if (existingProfiles.empty()) {
+        FLEXIFI_LOGD("No WiFi profiles to clear");
+        return;
+    }
+    
     FLEXIFI_LOGI("Clearing all WiFi profiles");
     
     // Clear from LittleFS
@@ -609,11 +631,15 @@ void StorageManager::clearAllWiFiProfiles() {
     
     // Clear from NVS
 #ifndef FLEXIFI_DISABLE_NVS
-    if (_nvsAvailable) {
+    if (_nvsAvailable && _existsNVS(PROFILES_KEY)) {
         _deleteNVS(PROFILES_KEY);
         FLEXIFI_LOGD("WiFi profiles cleared from NVS");
     }
 #endif
+    
+    // Clear cache
+    _cachedProfiles.clear();
+    _cacheTime = 0;
 }
 
 std::vector<WiFiProfile> StorageManager::getProfilesByPriority() {
@@ -707,6 +733,34 @@ String StorageManager::getStorageInfo() const {
     return info;
 }
 
+bool StorageManager::retryInitialization() {
+    FLEXIFI_LOGI("Retrying storage initialization");
+    
+    bool anySuccess = false;
+    
+    // Retry LittleFS if it failed
+    if (!_littleFSAvailable) {
+        if (_initLittleFS()) {
+            anySuccess = true;
+        }
+    }
+    
+    // Retry NVS if it failed
+    if (!_nvsAvailable) {
+        if (_initNVS()) {
+            anySuccess = true;
+        }
+    }
+    
+    if (anySuccess) {
+        FLEXIFI_LOGI("Storage retry successful - %s", getStorageInfo().c_str());
+    } else {
+        FLEXIFI_LOGW("Storage retry failed - no storage systems available");
+    }
+    
+    return anySuccess;
+}
+
 // Private methods
 
 void StorageManager::_determineStoragePreference() {
@@ -724,12 +778,23 @@ bool StorageManager::_initLittleFS() {
 #ifdef FLEXIFI_DISABLE_LITTLEFS
     return false;
 #else
+    FLEXIFI_LOGD("Initializing LittleFS");
+    
     if (!LittleFS.begin()) {
-        FLEXIFI_LOGD("LittleFS mount failed, attempting format");
+        FLEXIFI_LOGW("LittleFS mount failed, attempting format");
+        
+        // End any existing session before format
+        LittleFS.end();
+        
+        FLEXIFI_LOGI("Formatting LittleFS - this may take up to 30 seconds...");
+        
         if (!LittleFS.format()) {
             FLEXIFI_LOGE("LittleFS format failed");
             return false;
         }
+        
+        FLEXIFI_LOGD("LittleFS formatted successfully, attempting mount");
+        
         if (!LittleFS.begin()) {
             FLEXIFI_LOGE("LittleFS mount failed after format");
             return false;
@@ -737,6 +802,7 @@ bool StorageManager::_initLittleFS() {
     }
     
     _littleFSAvailable = true;
+    FLEXIFI_LOGD("LittleFS initialized successfully");
     return true;
 #endif
 }
@@ -745,12 +811,34 @@ bool StorageManager::_initNVS() {
 #ifdef FLEXIFI_DISABLE_NVS
     return false;
 #else
+    FLEXIFI_LOGD("Initializing NVS preferences");
+    
+    // Close any existing preferences session
+    _preferences.end();
+    
     if (!_preferences.begin(CONFIG_NAMESPACE, false)) {
-        FLEXIFI_LOGE("Failed to initialize NVS preferences");
+        FLEXIFI_LOGW("Failed to initialize NVS preferences with namespace '%s'", CONFIG_NAMESPACE);
+        
+        // Try to clear the namespace and retry once
+        _preferences.end();
+        
+        if (_preferences.begin(CONFIG_NAMESPACE, false)) {
+            _preferences.clear();
+            _preferences.end();
+            
+            if (_preferences.begin(CONFIG_NAMESPACE, false)) {
+                FLEXIFI_LOGD("NVS preferences initialized after clearing namespace");
+                _nvsAvailable = true;
+                return true;
+            }
+        }
+        
+        FLEXIFI_LOGE("Failed to initialize NVS preferences after retry");
         return false;
     }
     
     _nvsAvailable = true;
+    FLEXIFI_LOGD("NVS preferences initialized successfully");
     return true;
 #endif
 }
@@ -948,4 +1036,87 @@ void StorageManager::_sortProfilesByPriority(std::vector<WiFiProfile>& profiles)
         }
         return a.lastUsed > b.lastUsed;
     });
+}
+
+bool StorageManager::_saveWiFiProfileDirect(const WiFiProfile& profile) {
+    if (!profile.isValid()) {
+        FLEXIFI_LOGW("Cannot save invalid WiFi profile");
+        return false;
+    }
+    
+    // Load existing profiles from storage directly (bypass cache to avoid recursion)
+    std::vector<WiFiProfile> profiles;
+    
+    // Load directly from storage without triggering migration
+#ifndef FLEXIFI_DISABLE_LITTLEFS
+    if (_littleFSAvailable) {
+        String profilesData = _loadLittleFS(PROFILES_FILE);
+        if (!profilesData.isEmpty()) {
+            profiles = _decodeProfiles(profilesData);
+        }
+    }
+#endif
+    
+#ifndef FLEXIFI_DISABLE_NVS
+    if (profiles.empty() && _nvsAvailable) {
+        String profilesData = _loadNVS(PROFILES_KEY);
+        if (!profilesData.isEmpty()) {
+            profiles = _decodeProfiles(profilesData);
+        }
+    }
+#endif
+    
+    // Find existing profile or add new one
+    int existingIndex = _findProfileIndex(profiles, profile.ssid);
+    if (existingIndex >= 0) {
+        // Update existing profile
+        profiles[existingIndex] = profile;
+        FLEXIFI_LOGD("Updated existing profile: %s", profile.ssid.c_str());
+    } else {
+        // Add new profile
+        profiles.push_back(profile);
+        FLEXIFI_LOGD("Added new profile: %s", profile.ssid.c_str());
+    }
+    
+    // Save back to storage
+    String encodedData = _encodeProfiles(profiles);
+    bool saved = false;
+    
+    // Save to preferred storage first
+    if (_preferLittleFS && _littleFSAvailable) {
+#ifndef FLEXIFI_DISABLE_LITTLEFS
+        saved = _saveLittleFS(PROFILES_FILE, encodedData);
+        if (saved) {
+            FLEXIFI_LOGD("WiFi profiles saved to LittleFS");
+        }
+#endif
+    } else if (_nvsAvailable) {
+#ifndef FLEXIFI_DISABLE_NVS
+        saved = _saveNVS(PROFILES_KEY, encodedData);
+        if (saved) {
+            FLEXIFI_LOGD("WiFi profiles saved to NVS");
+        }
+#endif
+    }
+    
+    // Try fallback storage if primary failed
+    if (!saved) {
+        if (!_preferLittleFS && _littleFSAvailable) {
+#ifndef FLEXIFI_DISABLE_LITTLEFS
+            saved = _saveLittleFS(PROFILES_FILE, encodedData);
+            if (saved) {
+                FLEXIFI_LOGD("WiFi profiles saved to LittleFS (fallback)");
+            }
+#endif
+        } else if (_nvsAvailable) {
+#ifndef FLEXIFI_DISABLE_NVS
+            saved = _saveNVS(PROFILES_KEY, encodedData);
+            if (saved) {
+                FLEXIFI_LOGD("WiFi profiles saved to NVS (fallback)");
+            }
+#endif
+        }
+    }
+    
+    return saved;
 }

@@ -14,6 +14,7 @@ Flexifi was mostly developed with the help of Claude, an AI assistant by Anthrop
 - **Multiple Templates** - Modern, Classic, Minimal, and Custom template support
 - **Event-Driven Architecture** - Rich callback system for all portal states
 - **Non-blocking Operation** - Fully async design for responsive performance
+- **Automatic Password Generation** - Optional secure password generation for captive portal
 
 ## Quick Start
 
@@ -43,7 +44,7 @@ lib_deps =
 #include <Flexifi.h>
 
 AsyncWebServer server(80);
-Flexifi portal(&server);
+Flexifi portal(&server);  // Or portal(&server, true) for password generation
 
 void setup() {
     Serial.begin(115200);
@@ -106,6 +107,37 @@ String customHTML = R"(
 portal.setCustomTemplate(customHTML);
 ```
 
+## Password Generation
+
+Flexifi can automatically generate secure passwords for the captive portal:
+
+```cpp
+// Enable password generation in constructor
+Flexifi portal(&server, true);
+
+void setup() {
+    // Start portal without specifying password - uses generated one
+    portal.startPortal("MyDevice-Setup");
+    
+    // Get generated password for display (e.g., LCD screen)
+    String password = portal.getGeneratedPassword();
+    Serial.printf("Portal Password: %s\n", password.c_str());
+}
+```
+
+### Configuration
+
+```cpp
+// Customize password logging interval (default: 30 seconds)
+#define FLEXIFI_PASSWORD_LOG_INTERVAL 60000  // 60 seconds
+```
+
+The generated password:
+- Uses 8 alphanumeric characters (0-9, A-Z, a-z)
+- Logged periodically to serial output while portal is active
+- Available via `getGeneratedPassword()` for external display
+- Only used when no password is provided to `startPortal()`
+
 ## API Reference
 
 ### Core Methods
@@ -115,6 +147,7 @@ portal.setCustomTemplate(customHTML);
 bool startPortal(const String& apName, const String& apPassword = "");
 void stopPortal();
 bool isPortalActive();
+String getGeneratedPassword();  // Get auto-generated password
 
 // Configuration
 void setTemplate(const String& templateName);
@@ -173,6 +206,9 @@ portal.onConfigSave([](const String& ssid, const String& password) {
 #define FLEXIFI_SCAN_TIMEOUT 10000    // WiFi scan timeout (ms)
 #define FLEXIFI_CONNECT_TIMEOUT 15000 // Connection timeout (ms)
 #define FLEXIFI_PORTAL_TIMEOUT 300000 // Portal timeout (ms)
+
+// Password generation
+#define FLEXIFI_PASSWORD_LOG_INTERVAL 30000 // Password log interval (ms)
 ```
 
 ### Dependency Issues

@@ -258,3 +258,116 @@ h2 {
 .button-group .btn {
     margin: 0;
 }
+
+/* Signal Strength Indicator - Enhanced with animations and better styling */
+.signal-strength {
+    display: inline-flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    width: auto;
+    height: 20px;
+    padding: 2px;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.signal-strength .bar {
+    display: inline-block;
+    width: 4px;
+    margin-left: 2px;
+    transform-origin: 100% 100%;
+    background-color: #707070;
+    border-radius: 2px;
+    transition: all 0.3s cubic-bezier(0.17, 0.67, 0.42, 1.3);
+    opacity: 0.3;
+}
+
+/* Base bar heights as percentages of container - 5 bars total */
+.signal-strength .bar-1 { height: 20%; }
+.signal-strength .bar-2 { height: 40%; }
+.signal-strength .bar-3 { height: 60%; }
+.signal-strength .bar-4 { height: 80%; }
+.signal-strength .bar-5 { height: 100%; }
+
+/* Signal strength levels with 5-bar system (0-5 scale) */
+.signal-strength.strength-0 .bar {
+    opacity: 0.2;
+    background: #ef4444; /* All bars dim red for very poor signal */
+}
+
+.signal-strength.strength-1 .bar-1 {
+    opacity: 1;
+    background: #dc2626; /* Red - 1 bar for very poor signal */
+}
+.signal-strength.strength-1 .bar-2,
+.signal-strength.strength-1 .bar-3,
+.signal-strength.strength-1 .bar-4,
+.signal-strength.strength-1 .bar-5 {
+    opacity: 0.2;
+    background: #707070;
+}
+
+.signal-strength.strength-2 .bar-1,
+.signal-strength.strength-2 .bar-2 {
+    opacity: 1;
+    background: #ea580c; /* Red-Orange - 2 bars for poor signal */
+}
+.signal-strength.strength-2 .bar-3,
+.signal-strength.strength-2 .bar-4,
+.signal-strength.strength-2 .bar-5 {
+    opacity: 0.2;
+    background: #707070;
+}
+
+.signal-strength.strength-3 .bar-1,
+.signal-strength.strength-3 .bar-2,
+.signal-strength.strength-3 .bar-3 {
+    opacity: 1;
+    background: #ca8a04; /* Yellow-Orange - 3 bars for fair signal */
+}
+.signal-strength.strength-3 .bar-4,
+.signal-strength.strength-3 .bar-5 {
+    opacity: 0.2;
+    background: #707070;
+}
+
+.signal-strength.strength-4 .bar-1,
+.signal-strength.strength-4 .bar-2,
+.signal-strength.strength-4 .bar-3,
+.signal-strength.strength-4 .bar-4 {
+    opacity: 1;
+    background: #65a30d; /* Yellow-Green - 4 bars for good signal */
+}
+.signal-strength.strength-4 .bar-5 {
+    opacity: 0.2;
+    background: #707070;
+}
+
+.signal-strength.strength-5 .bar-1,
+.signal-strength.strength-5 .bar-2,
+.signal-strength.strength-5 .bar-3,
+.signal-strength.strength-5 .bar-4,
+.signal-strength.strength-5 .bar-5 {
+    opacity: 1;
+    background: #16a34a; /* Green - 5 bars for excellent signal */
+}
+
+/* Animation for signal strength introduction - simplified to avoid color conflicts */
+@keyframes signal-intro {
+    from {
+        transform: scaleY(0.3);
+    }
+    to {
+        transform: scaleY(1);
+    }
+}
+
+.signal-strength .bar {
+    animation: signal-intro 0.3s ease-out forwards;
+}
+
+.signal-strength .bar-1 { animation-delay: 0.05s; }
+.signal-strength .bar-2 { animation-delay: 0.1s; }
+.signal-strength .bar-3 { animation-delay: 0.15s; }
+.signal-strength .bar-4 { animation-delay: 0.2s; }
+.signal-strength .bar-5 { animation-delay: 0.25s; }

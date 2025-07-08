@@ -10,7 +10,7 @@
 // Static instance for WiFi event callbacks
 Flexifi* Flexifi::_instance = nullptr;
 
-Flexifi::Flexifi(AsyncWebServer* server) :
+Flexifi::Flexifi(AsyncWebServer* server, bool generatePassword) :
     _server(server),
     _portalServer(nullptr),
     _storage(nullptr),
@@ -22,14 +22,20 @@ Flexifi::Flexifi(AsyncWebServer* server) :
     _currentPassword(""),
     _apName(""),
     _apPassword(""),
+    _generatedPassword(""),
+    _useGeneratedPassword(generatePassword),
     _portalTimeout(FLEXIFI_PORTAL_TIMEOUT),
     _connectTimeout(FLEXIFI_CONNECT_TIMEOUT),
     _portalStartTime(0),
     _connectStartTime(0),
     _lastScanTime(0),
+    _lastStorageRetry(0),
     _networkCount(0),
     _networksJSON("[]"),
-    _minSignalQuality(-80),
+    _minSignalQuality(-70),
+    _mdnsHostname("flexifi"),
+    _mdnsStarted(false),
+    _scanInProgress(false),
     _parameters(nullptr),
     _parameterCount(0),
     _maxParameters(10),
@@ -66,6 +72,12 @@ Flexifi::Flexifi(AsyncWebServer* server) :
     // Setup WiFi event handlers
     _setupWiFiEvents();
     
+    // Generate password if requested
+    if (_useGeneratedPassword) {
+        _generatedPassword = _generatePassword();
+        FLEXIFI_LOGI("Generated portal password: %s", _generatedPassword.c_str());
+    }
+    
     FLEXIFI_LOGI("Flexifi initialized");
 }
 
@@ -99,24 +111,29 @@ Flexifi::~Flexifi() {
         delete _templateManager;
         _templateManager = nullptr;
     }
-    
-    FLEXIFI_LOGD("Flexifi destroyed");
 }
 
 bool Flexifi::init() {
-    if (!_storage || !_templateManager || !_portalServer) {
-        FLEXIFI_LOGE("Components not properly initialized");
+    FLEXIFI_LOGD("Initializing Flexifi");
+    
+    if (!_storage) {
+        FLEXIFI_LOGE("Storage manager not initialized");
         return false;
     }
     
-    // Initialize storage
-    if (!_storage->init()) {
-        FLEXIFI_LOGE("Failed to initialize storage manager");
-        return false;
+    bool storageInit = _storage->init();
+    if (!storageInit) {
+        FLEXIFI_LOGW("Storage initialization failed, continuing without persistent storage");
+        FLEXIFI_LOGI("Storage status: %s", _storage->getStorageInfo().c_str());
+        // Don't fail initialization if storage fails - we can still function without it
+    } else {
+        FLEXIFI_LOGI("Storage initialized successfully");
+        
+        // Load configuration only if storage is available
+        if (!loadConfig()) {
+            FLEXIFI_LOGW("No previous configuration found");
+        }
     }
-    
-    // Load configuration
-    loadConfig();
     
     FLEXIFI_LOGI("Flexifi initialization completed");
     return true;
@@ -139,7 +156,7 @@ void Flexifi::setCustomTemplate(const String& htmlTemplate) {
 void Flexifi::setCredentials(const String& ssid, const String& password) {
     _currentSSID = ssid;
     _currentPassword = password;
-    FLEXIFI_LOGI("Credentials set for SSID: %s", ssid.c_str());
+    FLEXIFI_LOGD("Credentials set for SSID: %s", ssid.c_str());
 }
 
 void Flexifi::setPortalTimeout(unsigned long timeout) {
@@ -152,6 +169,74 @@ void Flexifi::setConnectTimeout(unsigned long timeout) {
     FLEXIFI_LOGD("Connect timeout set to: %lu ms", timeout);
 }
 
+// mDNS Configuration
+void Flexifi::setMDNSHostname(const String& hostname) {
+    _mdnsHostname = hostname;
+    FLEXIFI_LOGI("mDNS hostname set to: %s", hostname.c_str());
+    
+    // If mDNS is already started, restart it with new hostname
+    if (_mdnsStarted && WiFi.isConnected()) {
+        _stopMDNS();
+        _startMDNS();
+    }
+}
+
+String Flexifi::getMDNSHostname() const {
+    return _mdnsHostname;
+}
+
+String Flexifi::getGeneratedPassword() const {
+    return _generatedPassword;
+}
+
+bool Flexifi::isMDNSEnabled() const {
+    return _mdnsStarted;
+}
+
+bool Flexifi::_startMDNS() {
+#ifdef FLEXIFI_MDNS
+    if (_mdnsStarted) {
+        FLEXIFI_LOGW("mDNS already started");
+        return true;
+    }
+    
+    if (WiFi.status() != WL_CONNECTED) {
+        FLEXIFI_LOGW("Cannot start mDNS - WiFi not connected");
+        return false;
+    }
+    
+    if (MDNS.begin(_mdnsHostname.c_str())) {
+        _mdnsStarted = true;
+        FLEXIFI_LOGI("🌐 mDNS started: http://%s.local", _mdnsHostname.c_str());
+        
+        // Add HTTP service
+        MDNS.addService("http", "tcp", 80);
+        
+        // Add device information
+        MDNS.addServiceTxt("http", "tcp", "device", "flexifi");
+        MDNS.addServiceTxt("http", "tcp", "version", "1.0");
+        
+        return true;
+    } else {
+        FLEXIFI_LOGE("Failed to start mDNS");
+        return false;
+    }
+#else
+    FLEXIFI_LOGD("mDNS not available - FLEXIFI_MDNS not defined");
+    return false;
+#endif
+}
+
+void Flexifi::_stopMDNS() {
+#ifdef FLEXIFI_MDNS
+    if (_mdnsStarted) {
+        MDNS.end();
+        _mdnsStarted = false;
+        FLEXIFI_LOGI("mDNS stopped");
+    }
+#endif
+}
+
 bool Flexifi::startPortal(const String& apName, const String& apPassword) {
     if (_portalState != PortalState::STOPPED) {
         FLEXIFI_LOGW("Portal already running");
@@ -161,7 +246,14 @@ bool Flexifi::startPortal(const String& apName, const String& apPassword) {
     FLEXIFI_LOGI("Starting portal with AP: %s", apName.c_str());
     
     _apName = apName;
-    _apPassword = apPassword;
+    
+    // Use generated password if enabled and no password provided
+    if (_useGeneratedPassword && apPassword.isEmpty()) {
+        _apPassword = _generatedPassword;
+        FLEXIFI_LOGI("Using generated password for portal: %s", _apPassword.c_str());
+    } else {
+        _apPassword = apPassword;
+    }
     
     // Initialize storage
     if (!_storage->init()) {
@@ -184,7 +276,7 @@ bool Flexifi::startPortal(const String& apName, const String& apPassword) {
     _portalStartTime = millis();
     _onPortalStateChange(PortalState::ACTIVE);
     
-    // Trigger callback
+    // Trigger portal start callback
     if (_onPortalStart) {
         _onPortalStart();
     }
@@ -205,19 +297,14 @@ void Flexifi::stopPortal() {
     // Stop access point
     _stopAP();
     
-    // Clean up web server
-    if (_portalServer) {
-        _portalServer->cleanup();
-    }
-    
-    // Clean up storage
-    if (_storage) {
-        _storage->deinit();
-    }
+    // Clear cached network data to free memory
+    _networksJSON = "[]";
+    _networkCount = 0;
+    _scanInProgress = false;
     
     _onPortalStateChange(PortalState::STOPPED);
     
-    // Trigger callback
+    // Trigger portal stop callback
     if (_onPortalStop) {
         _onPortalStop();
     }
@@ -235,57 +322,40 @@ PortalState Flexifi::getPortalState() const {
 
 bool Flexifi::saveConfig() {
     if (!_storage) {
-        FLEXIFI_LOGE("Storage not initialized");
         return false;
     }
     
-    if (_currentSSID.isEmpty()) {
-        FLEXIFI_LOGW("No credentials to save");
-        return false;
-    }
-    
-    // Create WiFi profile with auto-connect enabled and high priority
-    WiFiProfile profile(_currentSSID, _currentPassword, 100);
-    profile.autoConnect = true;
-    profile.lastUsed = millis();
-    
-    bool success = _storage->saveWiFiProfile(profile);
-    
+    bool success = _storage->saveCredentials(_currentSSID, _currentPassword);
     if (success) {
-        FLEXIFI_LOGI("Configuration saved successfully");
+        FLEXIFI_LOGI("Configuration saved: %s", _currentSSID.c_str());
         
-        // Trigger callback
+        // Save all custom parameter values
+        _saveParameterValues();
+        
+        // Trigger config save callback
         if (_onConfigSave) {
             _onConfigSave(_currentSSID, _currentPassword);
         }
     } else {
         FLEXIFI_LOGE("Failed to save configuration");
     }
-    
     return success;
 }
 
 bool Flexifi::loadConfig() {
     if (!_storage) {
-        FLEXIFI_LOGE("Storage not initialized");
-        return false;
-    }
-    
-    if (!_storage->init()) {
-        FLEXIFI_LOGE("Failed to initialize storage");
         return false;
     }
     
     String ssid, password;
     bool success = _storage->loadCredentials(ssid, password);
-    
     if (success) {
         _currentSSID = ssid;
         _currentPassword = password;
         FLEXIFI_LOGI("Configuration loaded: %s", ssid.c_str());
-    } else {
-        FLEXIFI_LOGD("No saved configuration found");
     }
+    
+    // Note: Parameter values are loaded when parameters are added (see addParameter method)
     
     return success;
 }
@@ -293,23 +363,175 @@ bool Flexifi::loadConfig() {
 void Flexifi::clearConfig() {
     if (_storage) {
         _storage->clearCredentials();
+        _currentSSID = "";
+        _currentPassword = "";
         FLEXIFI_LOGI("Configuration cleared");
     }
-    
-    _currentSSID = "";
-    _currentPassword = "";
 }
 
-void Flexifi::addParameter(FlexifiParameter* parameter) {
-    if (!parameter) {
-        FLEXIFI_LOGW("Cannot add null parameter");
-        return;
+bool Flexifi::retryStorageInit() {
+    if (!_storage) {
+        return false;
     }
     
+    bool success = _storage->retryInitialization();
+    if (success) {
+        // If storage became available, try to load config and parameters
+        loadConfig();
+        _loadParameterValues();
+    }
+    
+    return success;
+}
+
+// WiFi Profile Management
+bool Flexifi::addWiFiProfile(const String& ssid, const String& password, int priority) {
+    if (!_storage) {
+        return false;
+    }
+    
+    FLEXIFI_LOGI("Adding WiFi profile: %s (priority: %d)", ssid.c_str(), priority);
+    WiFiProfile profile(ssid, password, priority);
+    return _storage->saveWiFiProfile(profile);
+}
+
+bool Flexifi::updateWiFiProfile(const String& ssid, const String& password, int priority) {
+    return addWiFiProfile(ssid, password, priority); // saveWiFiProfile handles updates
+}
+
+bool Flexifi::deleteWiFiProfile(const String& ssid) {
+    if (!_storage) {
+        return false;
+    }
+    
+    FLEXIFI_LOGI("Deleting WiFi profile: %s", ssid.c_str());
+    return _storage->deleteWiFiProfile(ssid);
+}
+
+bool Flexifi::hasWiFiProfile(const String& ssid) {
+    if (!_storage) {
+        return false;
+    }
+    
+    std::vector<WiFiProfile> profiles = _storage->loadWiFiProfiles();
+    for (const auto& profile : profiles) {
+        if (profile.ssid == ssid) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Flexifi::clearAllWiFiProfiles() {
+    if (_storage) {
+        _storage->clearAllWiFiProfiles();
+        FLEXIFI_LOGI("All WiFi profiles cleared");
+    }
+}
+
+int Flexifi::getWiFiProfileCount() const {
+    if (!_storage) {
+        return 0;
+    }
+    
+    std::vector<WiFiProfile> profiles = _storage->loadWiFiProfiles();
+    return profiles.size();
+}
+
+String Flexifi::getWiFiProfilesJSON() const {
+    if (!_storage) {
+        return "[]";
+    }
+    
+    std::vector<WiFiProfile> profiles = _storage->loadWiFiProfiles();
+    return _formatProfilesJSON(profiles);
+}
+
+// Auto-connect functionality
+bool Flexifi::autoConnect() {
+    if (!_autoConnectEnabled) {
+        FLEXIFI_LOGD("🚫 autoConnect() called but auto-connect is disabled");
+        return false;
+    }
+    
+    if (!_storage) {
+        FLEXIFI_LOGD("🚫 autoConnect() called but storage is not available");
+        return false;
+    }
+    
+    FLEXIFI_LOGI("🔍 autoConnect() called - enabled: YES, storage: YES");
+    
+    // Check retry limits
+    unsigned long now = millis();
+    if (_autoConnectRetryCount >= MAX_AUTO_CONNECT_RETRIES) {
+        if (!_autoConnectLimitReachedLogged) {
+            FLEXIFI_LOGW("🚫 Auto-connect retry limit reached (%d/%d)", _autoConnectRetryCount, MAX_AUTO_CONNECT_RETRIES);
+            _autoConnectLimitReachedLogged = true;
+        }
+        return false;
+    }
+    
+    // Check retry delay (but allow immediate first attempt)
+    if (_lastAutoConnectAttempt > 0 && now - _lastAutoConnectAttempt < AUTO_CONNECT_RETRY_DELAY) {
+        unsigned long remainingDelay = AUTO_CONNECT_RETRY_DELAY - (now - _lastAutoConnectAttempt);
+        FLEXIFI_LOGD("🕐 Auto-connect retry delay: %lu ms remaining", remainingDelay);
+        return false;
+    }
+    
+    _lastAutoConnectAttempt = now;
+    _autoConnectRetryCount++;
+    
+    FLEXIFI_LOGI("🔄 Starting auto-connect attempt %d/%d", _autoConnectRetryCount, MAX_AUTO_CONNECT_RETRIES);
+    
+    // Try to connect to saved profiles
+    return _tryConnectToProfiles();
+}
+
+void Flexifi::setAutoConnectEnabled(bool enabled) {
+    _autoConnectEnabled = enabled;
+    FLEXIFI_LOGI("Auto-connect %s", enabled ? "enabled" : "disabled");
+}
+
+bool Flexifi::isAutoConnectEnabled() const {
+    return _autoConnectEnabled;
+}
+
+String Flexifi::getHighestPrioritySSID() const {
+    if (!_storage) {
+        return "";
+    }
+    
+    std::vector<WiFiProfile> profiles = _storage->loadWiFiProfiles();
+    if (profiles.empty()) {
+        return "";
+    }
+    
+    // Find highest priority profile with autoConnect enabled
+    WiFiProfile* highest = nullptr;
+    for (auto& profile : profiles) {
+        if (profile.autoConnect && (!highest || profile.priority > highest->priority)) {
+            highest = &profile;
+        }
+    }
+    
+    return highest ? highest->ssid : "";
+}
+
+bool Flexifi::updateProfileLastUsed(const String& ssid) {
+    if (!_storage) {
+        return false;
+    }
+    
+    return _storage->updateProfileLastUsed(ssid);
+}
+
+// Custom parameters
+void Flexifi::addParameter(FlexifiParameter* parameter) {
     if (_addParameterToArray(parameter)) {
-        FLEXIFI_LOGI("Added parameter: %s", parameter->getID().c_str());
-    } else {
-        FLEXIFI_LOGE("Failed to add parameter: %s", parameter->getID().c_str());
+        FLEXIFI_LOGD("Parameter added: %s", parameter->getID().c_str());
+        
+        // Load saved value for this parameter (if any)
+        _loadParameterValue(parameter);
     }
 }
 
@@ -320,27 +542,19 @@ void Flexifi::addParameter(const String& id, const String& label, const String& 
 
 FlexifiParameter* Flexifi::getParameter(const String& id) {
     int index = _findParameterIndex(id);
-    if (index >= 0) {
-        return _parameters[index];
-    }
-    return nullptr;
+    return (index >= 0) ? _parameters[index] : nullptr;
 }
 
 String Flexifi::getParameterValue(const String& id) const {
     int index = _findParameterIndex(id);
-    if (index >= 0) {
-        return _parameters[index]->getValue();
-    }
-    return "";
+    return (index >= 0) ? _parameters[index]->getValue() : "";
 }
 
 void Flexifi::setParameterValue(const String& id, const String& value) {
     int index = _findParameterIndex(id);
     if (index >= 0) {
         _parameters[index]->setValue(value);
-        FLEXIFI_LOGD("Set parameter %s = %s", id.c_str(), value.c_str());
-    } else {
-        FLEXIFI_LOGW("Parameter not found: %s", id.c_str());
+        FLEXIFI_LOGD("Parameter value set: %s = %s", id.c_str(), value.c_str());
     }
 }
 
@@ -350,91 +564,68 @@ int Flexifi::getParameterCount() const {
 
 String Flexifi::getParametersHTML() const {
     String html = "";
-    
     for (int i = 0; i < _parameterCount; i++) {
-        html += _parameters[i]->generateHTML();
+        if (_parameters[i]) {
+            html += _parameters[i]->generateHTML();
+        }
     }
-    
     return html;
 }
 
-void Flexifi::setMinSignalQuality(int quality) {
-    _minSignalQuality = quality;
-    FLEXIFI_LOGD("Minimum signal quality set to: %d dBm", quality);
-}
-
-int Flexifi::getMinSignalQuality() const {
-    return _minSignalQuality;
-}
-
-bool Flexifi::scanNetworks() {
-    if (_wifiState == WiFiState::CONNECTING) {
-        FLEXIFI_LOGW("Cannot scan while connecting");
+// Network management
+bool Flexifi::scanNetworks(bool bypassThrottle) {
+    unsigned long now = millis();
+    
+    // Check throttle limit unless bypassed
+    if (!bypassThrottle && now - _lastScanTime < FLEXIFI_SCAN_THROTTLE_TIME) {
+        FLEXIFI_LOGW("🚫 Scan throttled - too soon since last scan (%lu ms ago)", now - _lastScanTime);
         return false;
     }
     
-    unsigned long now = millis();
-    if (now - _lastScanTime < 30000) { // Throttle to 30 seconds between scans
-        FLEXIFI_LOGD("Scan throttled - too soon since last scan (%lu ms ago)", now - _lastScanTime);
-        return false;
+    if (bypassThrottle) {
+        FLEXIFI_LOGI("⏭️ Bypassing scan throttle for initial scan");
+    } else {
+        FLEXIFI_LOGD("✅ Scan throttle check passed (%lu ms since last scan)", now - _lastScanTime);
     }
     
     FLEXIFI_LOGI("Starting WiFi scan");
-    _lastScanTime = now;
     
-    // Check current scan status first
-    int currentScanStatus = WiFi.scanComplete();
-    FLEXIFI_LOGD("Current scan status before new scan: %d", currentScanStatus);
+    FLEXIFI_LOGD("Current scan status before new scan: %d", WiFi.scanComplete());
     
-    // If a scan is already running, don't start another
-    if (currentScanStatus == WIFI_SCAN_RUNNING) {
-        FLEXIFI_LOGD("Scan already in progress, waiting...");
-        return true; // Scan is running, so consider this successful
+    // Ensure clean WiFi state before scanning (workaround for ESP32 scan issues)
+    if (WiFi.status() == WL_CONNECTED || WiFi.status() == WL_CONNECT_FAILED) {
+        FLEXIFI_LOGD("Disconnecting from WiFi before scan to ensure clean state");
+        WiFi.disconnect();
+        delay(100);
     }
     
-    // Ensure WiFi is in the right mode for scanning
-    wifi_mode_t currentMode = WiFi.getMode();
-    FLEXIFI_LOGD("Current WiFi mode: %d", currentMode);
-    
-    // Force WiFi to AP+STA mode if needed
-    if (currentMode != WIFI_MODE_APSTA) {
-        FLEXIFI_LOGW("WiFi mode is %d, forcing to AP+STA (%d) for scanning", currentMode, WIFI_MODE_APSTA);
-        WiFi.mode(WIFI_MODE_APSTA);
-        delay(200); // Give more time for mode change
+    // Ensure WiFi is in the correct mode for scanning
+    if (WiFi.getMode() == WIFI_OFF) {
+        WiFi.mode(WIFI_AP_STA);
+        delay(100); // Give time for mode to change
     }
     
-    // Clear any previous scan results
-    if (currentScanStatus >= 0 || currentScanStatus == WIFI_SCAN_FAILED) {
+    FLEXIFI_LOGD("Current WiFi mode: %d", WiFi.getMode());
+    
+    // Delete any previous scan results
+    int scanResult = WiFi.scanComplete();
+    if (scanResult >= 0) {
         FLEXIFI_LOGD("Clearing previous scan results");
         WiFi.scanDelete();
-        delay(50); // Small delay after clearing
     }
     
-    // Try to start async scan with retries
-    int scanResult = WIFI_SCAN_FAILED;
-    for (int retry = 0; retry < 3; retry++) {
-        scanResult = WiFi.scanNetworks(true);
-        FLEXIFI_LOGD("Scan initiation attempt %d result: %d", retry + 1, scanResult);
-        
-        if (scanResult == WIFI_SCAN_RUNNING) {
-            FLEXIFI_LOGI("WiFi scan started successfully");
-            break;
-        } else {
-            FLEXIFI_LOGW("Scan start failed with result: %d, retry in 100ms", scanResult);
-            delay(100);
-        }
-    }
+    // Start new scan (async, don't show hidden networks)
+    int result = WiFi.scanNetworks(true, false); // true = async, false = no hidden networks
+    FLEXIFI_LOGD("Scan initiation attempt 1 result: %d", result);
     
-    if (scanResult != WIFI_SCAN_RUNNING) {
-        FLEXIFI_LOGE("Failed to start WiFi scan after 3 attempts, result: %d", scanResult);
+    if (result == WIFI_SCAN_FAILED) {
+        FLEXIFI_LOGW("WiFi scan failed to start");
         return false;
     }
     
-    // Notify via WebSocket
-    if (_portalServer) {
-        _portalServer->broadcastMessage("scan_start", "Scanning for networks...");
-    }
-    
+    FLEXIFI_LOGI("WiFi scan started successfully");
+    _lastScanTime = now;
+    _scanInProgress = true;
     return true;
 }
 
@@ -444,13 +635,8 @@ String Flexifi::getNetworksJSON() const {
 
 unsigned long Flexifi::getScanTimeRemaining() const {
     unsigned long now = millis();
-    unsigned long timeSinceLastScan = now - _lastScanTime;
-    
-    if (timeSinceLastScan >= 30000) {
-        return 0; // Can scan now
-    }
-    
-    return 30000 - timeSinceLastScan; // Time remaining in ms
+    unsigned long elapsed = now - _lastScanTime;
+    return (elapsed < FLEXIFI_SCAN_THROTTLE_TIME) ? (FLEXIFI_SCAN_THROTTLE_TIME - elapsed) : 0;
 }
 
 bool Flexifi::connectToWiFi(const String& ssid, const String& password) {
@@ -506,6 +692,16 @@ String Flexifi::getConnectedSSID() const {
     return "";
 }
 
+void Flexifi::setMinSignalQuality(int quality) {
+    _minSignalQuality = quality;
+    FLEXIFI_LOGD("Minimum signal quality set to: %d dBm", quality);
+}
+
+int Flexifi::getMinSignalQuality() const {
+    return _minSignalQuality;
+}
+
+// Event callbacks
 void Flexifi::onPortalStart(std::function<void()> callback) {
     _onPortalStart = callback;
 }
@@ -538,69 +734,74 @@ void Flexifi::onConnectFailed(std::function<void(const String&)> callback) {
     _onConnectFailed = callback;
 }
 
+// Utility methods
 void Flexifi::loop() {
-    // Process DNS requests for captive portal
-    if (_dnsServer && _portalState == PortalState::ACTIVE) {
-        _dnsServer->processNextRequest();
-    }
-    
     // Handle WiFi events
     _handleWiFiEvents();
     
     // Check timeouts
     _checkTimeouts();
     
-    // Update network scan results only if we have an active or completed scan
-    int scanStatus = WiFi.scanComplete();
-    if (scanStatus != WIFI_SCAN_FAILED) {
+    // Retry storage initialization if it failed and enough time has passed
+    if (_storage && (!_storage->isLittleFSAvailable() || !_storage->isNVSAvailable())) {
+        unsigned long now = millis();
+        if (now - _lastStorageRetry > STORAGE_RETRY_DELAY) {
+            _lastStorageRetry = now;
+            retryStorageInit();
+        }
+    }
+    
+    // Only check scan status when we're actually scanning
+    if (_scanInProgress) {
         _updateNetworksJSON();
     }
     
-    // Handle auto-connect if enabled and not connected
-    if (_autoConnectEnabled && 
-        _wifiState == WiFiState::DISCONNECTED && 
-        _portalState == PortalState::STOPPED) {
-        
-        static unsigned long lastAutoConnectLog = 0;
+    // Periodically log generated password if portal is active and using generated password
+    if (_useGeneratedPassword && _portalState == PortalState::ACTIVE && !_generatedPassword.isEmpty()) {
+        static unsigned long lastPasswordLog = 0;
         unsigned long now = millis();
-        if (now - lastAutoConnectLog > 5000) { // Log every 5 seconds to avoid spam
-            FLEXIFI_LOGD("Auto-connect conditions met, calling autoConnect()");
-            lastAutoConnectLog = now;
+        if (now - lastPasswordLog > FLEXIFI_PASSWORD_LOG_INTERVAL) {
+            lastPasswordLog = now;
+            FLEXIFI_LOGI("📶 Portal active - Password: %s", _generatedPassword.c_str());
         }
-        
-        autoConnect();
     }
 }
 
 void Flexifi::reset() {
-    FLEXIFI_LOGI("Resetting Flexifi configuration");
+    FLEXIFI_LOGI("Resetting Flexifi");
     
-    // Clear stored credentials
+    // Stop portal
+    stopPortal();
+    
+    // Clear configuration
     clearConfig();
-    
-    // Disconnect from WiFi
-    WiFi.disconnect();
+    clearAllWiFiProfiles();
     
     // Reset state
-    _onWiFiStateChange(WiFiState::DISCONNECTED);
+    _wifiState = WiFiState::DISCONNECTED;
+    _currentSSID = "";
+    _currentPassword = "";
+    _autoConnectRetryCount = 0;
+    _lastAutoConnectAttempt = 0;
+    _autoConnectLimitReachedLogged = false;
     
-    // Clear network list
-    _networksJSON = "[]";
-    _networkCount = 0;
+    FLEXIFI_LOGI("Flexifi reset completed");
 }
 
 String Flexifi::getStatusJSON() const {
     DynamicJsonDocument doc(512);
-    
     doc["portal_state"] = static_cast<int>(_portalState);
     doc["wifi_state"] = static_cast<int>(_wifiState);
     doc["connected_ssid"] = getConnectedSSID();
-    doc["network_count"] = _networkCount;
-    doc["uptime"] = millis();
+    doc["profile_count"] = getWiFiProfileCount();
+    doc["auto_connect"] = _autoConnectEnabled;
+    doc["scan_remaining"] = getScanTimeRemaining();
     
-    if (_portalState == PortalState::ACTIVE) {
-        doc["portal_uptime"] = millis() - _portalStartTime;
-    }
+    // Check if scan is currently running
+    int scanStatus = WiFi.scanComplete();
+    doc["scan_in_progress"] = (scanStatus == WIFI_SCAN_RUNNING);
+    doc["scan_status"] = scanStatus;
+    doc["network_count"] = _networkCount;
     
     String json;
     serializeJson(doc, json);
@@ -609,68 +810,50 @@ String Flexifi::getStatusJSON() const {
 
 String Flexifi::getPortalHTML() const {
     if (!_templateManager) {
-        return "<html><body><h1>Flexifi Portal</h1><p>Template manager not initialized</p></body></html>";
+        return "<html><body><h1>Template Manager Not Available</h1></body></html>";
     }
     
-    // Generate custom parameters HTML
-    String customParametersHTML = getParametersHTML();
-    
-    return _templateManager->getPortalHTML(customParametersHTML);
+    String customParams = getParametersHTML();
+    return _templateManager->getPortalHTML(customParams);
 }
 
 // Private methods
-
 bool Flexifi::_setupAP() {
     FLEXIFI_LOGD("Setting up access point");
     
-    // Set WiFi mode to AP+STA to allow both AP and scanning
-    WiFi.mode(WIFI_MODE_APSTA);
+    // Stop any existing WiFi connections
+    WiFi.disconnect();
     
-    // Configure AP
-    bool success;
+    // Set WiFi mode to Access Point + Station
+    WiFi.mode(WIFI_AP_STA);
+    delay(100);
+    
+    // Configure and start access point
+    bool result;
     if (_apPassword.isEmpty()) {
-        success = WiFi.softAP(_apName.c_str());
+        result = WiFi.softAP(_apName.c_str());
     } else {
-        success = WiFi.softAP(_apName.c_str(), _apPassword.c_str());
+        result = WiFi.softAP(_apName.c_str(), _apPassword.c_str());
     }
     
-    if (!success) {
+    if (!result) {
         FLEXIFI_LOGE("Failed to start access point");
         return false;
     }
     
-    // Wait for AP to be ready
-    delay(100);
+    FLEXIFI_LOGI("Access point started - IP: %s", WiFi.softAPIP().toString().c_str());
     
-    IPAddress ip = WiFi.softAPIP();
-    FLEXIFI_LOGI("Access point started - IP: %s", ip.toString().c_str());
-    
-    // Set up DNS server for captive portal
+    // Start DNS server for captive portal
     if (!_dnsServer) {
         _dnsServer = new DNSServer();
     }
+    _dnsServer->start(53, "*", WiFi.softAPIP());
+    FLEXIFI_LOGI("DNS server started for captive portal");
     
-    // Start DNS server - redirect all DNS queries to our AP IP
-    if (_dnsServer->start(53, "*", ip)) {
-        FLEXIFI_LOGI("DNS server started for captive portal");
-    } else {
-        FLEXIFI_LOGW("Failed to start DNS server");
-    }
-    
-    // Wait a moment for AP to stabilize before starting scan
-    delay(500);
-    
-    // Start an initial network scan to populate the list
-    _lastScanTime = 0; // Reset scan throttle
+    // Start initial network scan
+    delay(500); // Give AP time to fully initialize
     FLEXIFI_LOGI("Initiating first network scan after AP setup");
-    
-    // Force start the initial scan by temporarily bypassing throttle
-    unsigned long savedScanTime = _lastScanTime;
-    _lastScanTime = millis() - 31000; // Set to over 30 seconds ago
-    scanNetworks();
-    if (WiFi.scanComplete() != WIFI_SCAN_RUNNING) {
-        _lastScanTime = savedScanTime; // Restore if scan didn't start
-    }
+    scanNetworks(); // This will start async scan
     
     return true;
 }
@@ -678,26 +861,41 @@ bool Flexifi::_setupAP() {
 void Flexifi::_stopAP() {
     FLEXIFI_LOGD("Stopping access point");
     
-    // Stop DNS server
     if (_dnsServer) {
         _dnsServer->stop();
-        FLEXIFI_LOGD("DNS server stopped");
+        delete _dnsServer;
+        _dnsServer = nullptr;
     }
     
-    // Invalidate network cache since WiFi mode is changing
-    _networksJSON = "[]";
-    _networkCount = 0;
-    _lastScanTime = 0; // Force fresh scan for auto-connect
-    
     WiFi.softAPdisconnect(true);
-    
-    // Switch to STA mode to allow auto-connect to work properly
     WiFi.mode(WIFI_STA);
+    
+    FLEXIFI_LOGI("Access point stopped");
 }
 
 void Flexifi::_handleWiFiEvents() {
-    // Handle WiFi connection state changes
+    // Handle connection
     if (_wifiState == WiFiState::CONNECTING) {
+        unsigned long now = millis();
+        
+        // Check for timeout
+        if (now - _connectStartTime > _connectTimeout) {
+            FLEXIFI_LOGW("WiFi connection timeout");
+            _onWiFiStateChange(WiFiState::FAILED);
+            
+            // Trigger callback
+            if (_onConnectFailed) {
+                _onConnectFailed(_currentSSID);
+            }
+            
+            // Notify via WebSocket
+            if (_portalServer) {
+                _portalServer->broadcastMessage("connect_failed", "Connection timeout");
+            }
+            return;
+        }
+        
+        // Check connection status
         wl_status_t status = WiFi.status();
         
         if (status == WL_CONNECTED) {
@@ -706,6 +904,9 @@ void Flexifi::_handleWiFiEvents() {
             
             // Save configuration
             saveConfig();
+            
+            // Start mDNS if enabled
+            _startMDNS();
             
             // Trigger callback
             if (_onWiFiConnect) {
@@ -738,6 +939,9 @@ void Flexifi::_handleWiFiEvents() {
         FLEXIFI_LOGW("WiFi disconnected");
         _onWiFiStateChange(WiFiState::DISCONNECTED);
         
+        // Stop mDNS on disconnection
+        _stopMDNS();
+        
         // Trigger callback
         if (_onWiFiDisconnect) {
             _onWiFiDisconnect();
@@ -748,26 +952,8 @@ void Flexifi::_handleWiFiEvents() {
 void Flexifi::_checkTimeouts() {
     unsigned long now = millis();
     
-    // Check connection timeout
-    if (_wifiState == WiFiState::CONNECTING && 
-        now - _connectStartTime > _connectTimeout) {
-        FLEXIFI_LOGW("Connection timeout");
-        _onWiFiStateChange(WiFiState::FAILED);
-        
-        // Trigger callback
-        if (_onConnectFailed) {
-            _onConnectFailed(_currentSSID);
-        }
-        
-        // Notify via WebSocket
-        if (_portalServer) {
-            _portalServer->broadcastMessage("connect_failed", "Connection timeout");
-        }
-    }
-    
     // Check portal timeout
-    if (_portalState == PortalState::ACTIVE && 
-        _portalTimeout > 0 && 
+    if (_portalState == PortalState::ACTIVE && _portalTimeout > 0 && 
         now - _portalStartTime > _portalTimeout) {
         FLEXIFI_LOGI("Portal timeout reached");
         stopPortal();
@@ -777,8 +963,27 @@ void Flexifi::_checkTimeouts() {
 void Flexifi::_updateNetworksJSON() {
     int scanResult = WiFi.scanComplete();
     
+    // Debug: Log scan status changes
+    static int lastScanResult = -99;
+    static unsigned long lastStatusLog = 0;
+    unsigned long now = millis();
+    
+    if (scanResult != lastScanResult || now - lastStatusLog > 10000) {
+        FLEXIFI_LOGD("🔍 Scan status check: result=%d, WiFi_mode=%d, time=%lu", 
+                    scanResult, WiFi.getMode(), now);
+        lastScanResult = scanResult;
+        lastStatusLog = now;
+    }
+    
+    // Handle scan states as recommended in ESP32 GitHub issue
+    if (scanResult == WIFI_SCAN_FAILED) {
+        // -2: No scan data available, but don't restart here (handled elsewhere)
+        FLEXIFI_LOGD("🔍 No scan data available (WIFI_SCAN_FAILED)");
+        return;
+    }
+    
     if (scanResult == WIFI_SCAN_RUNNING) {
-        // Scan still in progress
+        // -1: Scan still in progress
         return;
     }
     
@@ -786,8 +991,18 @@ void Flexifi::_updateNetworksJSON() {
         // Scan completed
         FLEXIFI_LOGD("WiFi scan completed, found %d networks", scanResult);
         
-        // Build JSON array with quality filtering
-        DynamicJsonDocument doc(2048);
+        // Debug: Log ALL networks found before filtering
+        FLEXIFI_LOGI("=== ALL NETWORKS FOUND (min signal quality: %d dBm) ===", _minSignalQuality);
+        for (int i = 0; i < scanResult; i++) {
+            int rssi = WiFi.RSSI(i);
+            String ssid = WiFi.SSID(i);
+            bool isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+            FLEXIFI_LOGI("Network %d: %s (%d dBm) %s", i, ssid.c_str(), rssi, isEncrypted ? "🔒" : "🔓");
+        }
+        FLEXIFI_LOGI("=== END ALL NETWORKS ===");
+        
+        // Build JSON array with quality filtering - increased size for large network lists
+        DynamicJsonDocument doc(8192);
         JsonArray networks = doc.to<JsonArray>();
         int filteredCount = 0;
         
@@ -813,6 +1028,9 @@ void Flexifi::_updateNetworksJSON() {
             network["channel"] = WiFi.channel(i);
             network["signal_strength"] = _getSignalStrengthIcon(rssi);
             filteredCount++;
+            
+            // Debug: Log networks that pass the filter
+            FLEXIFI_LOGI("✅ Keeping strong network: %s (%d dBm)", ssid.c_str(), rssi);
         }
         
         _networkCount = filteredCount;
@@ -833,10 +1051,14 @@ void Flexifi::_updateNetworksJSON() {
         
         // Reset scan time to prevent immediate re-scanning
         _lastScanTime = millis();
+        _scanInProgress = false;
         
         // Notify via WebSocket
         if (_portalServer) {
+            FLEXIFI_LOGI("📡 Broadcasting networks via WebSocket: %s", _networksJSON.substring(0, 100).c_str());
             _portalServer->broadcastNetworks(_networksJSON);
+        } else {
+            FLEXIFI_LOGW("⚠️ Portal server not available for WebSocket broadcast");
         }
     } else if (scanResult == WIFI_SCAN_FAILED) {
         // Only log failure once every 30 seconds to avoid spam
@@ -847,53 +1069,104 @@ void Flexifi::_updateNetworksJSON() {
             FLEXIFI_LOGW("WiFi scan failed (scanResult: %d, WiFi mode: %d)", scanResult, WiFi.getMode());
             lastFailureLog = now;
             
-            // Try to restart scanning after a delay
-            if (now - _lastScanTime > 15000) { // Only retry every 15 seconds
-                FLEXIFI_LOGI("Attempting to restart WiFi scanning due to persistent failures");
+            // Only auto-retry if we have no networks cached and portal is active
+            if (_networkCount == 0 && _portalState == PortalState::ACTIVE && now - _lastScanTime > 60000) {
+                FLEXIFI_LOGI("Attempting to restart WiFi scanning due to persistent failures (no networks cached)");
                 _lastScanTime = 0; // Reset throttle
                 
                 // Force a new scan attempt
                 scanNetworks();
+            } else if (_networkCount > 0) {
+                FLEXIFI_LOGD("Scan failed but we have %d cached networks, not retrying", _networkCount);
             }
         }
-        
-        _networksJSON = "[]";
-        _networkCount = 0;
     }
 }
 
 bool Flexifi::_validateCredentials(const String& ssid, const String& password) {
     if (ssid.isEmpty()) {
+        FLEXIFI_LOGW("SSID cannot be empty");
         return false;
     }
     
     if (ssid.length() > 32) {
+        FLEXIFI_LOGW("SSID too long (max 32 characters)");
         return false;
     }
     
     if (password.length() > 64) {
+        FLEXIFI_LOGW("Password too long (max 64 characters)");
         return false;
     }
     
     return true;
 }
 
-void Flexifi::_onPortalStateChange(PortalState newState) {
-    PortalState oldState = _portalState;
-    _portalState = newState;
-    
-    FLEXIFI_LOGD("Portal state changed: %d -> %d", static_cast<int>(oldState), static_cast<int>(newState));
+void Flexifi::_setupWiFiEvents() {
+    FLEXIFI_LOGD("Setting up WiFi event handlers");
+    WiFi.onEvent(_onWiFiEvent);
 }
 
-void Flexifi::_onWiFiStateChange(WiFiState newState) {
-    WiFiState oldState = _wifiState;
-    _wifiState = newState;
+void Flexifi::_onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (!_instance) return;
     
-    FLEXIFI_LOGD("WiFi state changed: %d -> %d", static_cast<int>(oldState), static_cast<int>(newState));
+    switch (event) {
+        case ARDUINO_EVENT_WIFI_SCAN_DONE:
+            FLEXIFI_LOGD("WiFi scan completed event received");
+            _instance->_updateNetworksJSON();
+            
+            // Call internal scan completion callback if set
+            if (_instance->_onInternalScanComplete) {
+                _instance->_onInternalScanComplete(_instance->_networkCount);
+            }
+            break;
+            
+        default:
+            // We only care about scan completion for now
+            break;
+    }
+}
+
+bool Flexifi::_tryConnectToProfiles() {
+    FLEXIFI_LOGI("🔍 _tryConnectToProfiles() called");
+    
+    if (!_storage) {
+        FLEXIFI_LOGE("🚫 Storage not available for profile loading");
+        return false;
+    }
+    
+    std::vector<WiFiProfile> profiles = _storage->loadWiFiProfiles();
+    FLEXIFI_LOGI("📋 Found %d profiles to try", (int)profiles.size());
+    
+    // Log all profiles
+    for (const WiFiProfile& profile : profiles) {
+        FLEXIFI_LOGI("  - %s (priority: %d, autoConnect: %s)", 
+                    profile.ssid.c_str(), profile.priority, 
+                    profile.autoConnect ? "YES" : "NO");
+    }
+    
+    // Log network cache status
+    FLEXIFI_LOGI("📡 Network cache status: JSON='%s', count=%d, lastScan=%lu, now=%lu", 
+                 _networksJSON.substring(0, 50).c_str(), _networkCount, _lastScanTime, millis());
+    
+    // Direct connection attempts without scanning
+    for (const WiFiProfile& profile : profiles) {
+        if (!profile.autoConnect) continue;
+        
+        FLEXIFI_LOGI("🔌 Trying direct connection to: %s (priority: %d)", 
+                    profile.ssid.c_str(), profile.priority);
+        
+        if (connectToWiFi(profile.ssid, profile.password)) {
+            FLEXIFI_LOGI("✅ Successfully connected to: %s", profile.ssid.c_str());
+            return true;
+        }
+    }
+    
+    FLEXIFI_LOGD("No available WiFi profiles found for auto-connect");
+    return false;
 }
 
 // Parameter management methods
-
 void Flexifi::_initParameters() {
     _parameters = new FlexifiParameter*[_maxParameters];
     for (int i = 0; i < _maxParameters; i++) {
@@ -940,280 +1213,48 @@ bool Flexifi::_addParameterToArray(FlexifiParameter* parameter) {
     
     // Check if we have space
     if (_parameterCount >= _maxParameters) {
-        FLEXIFI_LOGE("Maximum parameters reached (%d)", _maxParameters);
+        FLEXIFI_LOGE("Maximum parameter count reached: %d", _maxParameters);
         return false;
     }
     
-    // Add parameter
+    // Add to array
     _parameters[_parameterCount] = parameter;
     _parameterCount++;
     
     return true;
 }
 
-// Network filtering methods
-
+// Network filtering
 bool Flexifi::_networkMeetsQuality(int rssi) const {
     return rssi >= _minSignalQuality;
 }
 
 String Flexifi::_getSignalStrengthIcon(int rssi) const {
-    if (rssi > -50) {
-        return "📶📶📶📶"; // Excellent
-    } else if (rssi > -60) {
-        return "📶📶📶"; // Good
-    } else if (rssi > -70) {
-        return "📶📶"; // Fair
-    } else if (rssi > -80) {
-        return "📶"; // Poor
-    } else {
-        return "📵"; // Very poor
-    }
+    // Convert RSSI to 0-5 scale for CSS signal bars
+    int strength = 0;
+    if (rssi >= -30) strength = 5;
+    else if (rssi >= -50) strength = 4;
+    else if (rssi >= -60) strength = 3;
+    else if (rssi >= -70) strength = 2;
+    else if (rssi >= -80) strength = 1;
+    else strength = 0;
+    
+    return String(strength);
 }
 
-// WiFi Profile Management
-
-bool Flexifi::addWiFiProfile(const String& ssid, const String& password, int priority) {
-    if (!_storage) {
-        FLEXIFI_LOGE("Storage manager not initialized");
-        return false;
-    }
+// State change handlers
+void Flexifi::_onPortalStateChange(PortalState newState) {
+    PortalState oldState = _portalState;
+    _portalState = newState;
     
-    if (ssid.isEmpty()) {
-        FLEXIFI_LOGW("Cannot add WiFi profile with empty SSID");
-        return false;
-    }
-    
-    WiFiProfile profile(ssid, password, priority);
-    profile.lastUsed = millis();
-    
-    FLEXIFI_LOGI("Adding WiFi profile: %s (priority: %d)", ssid.c_str(), priority);
-    
-    return _storage->saveWiFiProfile(profile);
+    FLEXIFI_LOGD("Portal state changed: %d -> %d", static_cast<int>(oldState), static_cast<int>(newState));
 }
 
-bool Flexifi::updateWiFiProfile(const String& ssid, const String& password, int priority) {
-    if (!_storage) {
-        FLEXIFI_LOGE("Storage manager not initialized");
-        return false;
-    }
+void Flexifi::_onWiFiStateChange(WiFiState newState) {
+    WiFiState oldState = _wifiState;
+    _wifiState = newState;
     
-    if (ssid.isEmpty()) {
-        FLEXIFI_LOGW("Cannot update WiFi profile with empty SSID");
-        return false;
-    }
-    
-    WiFiProfile profile(ssid, password, priority);
-    profile.lastUsed = millis();
-    
-    FLEXIFI_LOGI("Updating WiFi profile: %s (priority: %d)", ssid.c_str(), priority);
-    
-    return _storage->updateWiFiProfile(ssid, profile);
-}
-
-bool Flexifi::deleteWiFiProfile(const String& ssid) {
-    if (!_storage) {
-        FLEXIFI_LOGE("Storage manager not initialized");
-        return false;
-    }
-    
-    if (ssid.isEmpty()) {
-        FLEXIFI_LOGW("Cannot delete WiFi profile with empty SSID");
-        return false;
-    }
-    
-    FLEXIFI_LOGI("Deleting WiFi profile: %s", ssid.c_str());
-    
-    return _storage->deleteWiFiProfile(ssid);
-}
-
-bool Flexifi::hasWiFiProfile(const String& ssid) {
-    if (!_storage) {
-        return false;
-    }
-    
-    return _storage->hasWiFiProfile(ssid);
-}
-
-void Flexifi::clearAllWiFiProfiles() {
-    if (!_storage) {
-        FLEXIFI_LOGE("Storage manager not initialized");
-        return;
-    }
-    
-    FLEXIFI_LOGI("Clearing all WiFi profiles");
-    _storage->clearAllWiFiProfiles();
-}
-
-int Flexifi::getWiFiProfileCount() {
-    if (!_storage) {
-        return 0;
-    }
-    
-    return _storage->getProfileCount();
-}
-
-String Flexifi::getWiFiProfilesJSON() const {
-    if (!_storage) {
-        return "[]";
-    }
-    
-    std::vector<WiFiProfile> profiles = _storage->getProfilesByPriority();
-    return _formatProfilesJSON(profiles);
-}
-
-// Auto-connect functionality
-
-bool Flexifi::autoConnect() {
-    if (!_autoConnectEnabled || !_storage) {
-        return false;
-    }
-    
-    unsigned long currentTime = millis();
-    
-    // Check if we should attempt auto-connect
-    if (currentTime - _lastAutoConnectAttempt < AUTO_CONNECT_RETRY_DELAY) {
-        return false;
-    }
-    
-    // Check if we've exceeded retry count
-    if (_autoConnectRetryCount >= MAX_AUTO_CONNECT_RETRIES) {
-        // Only log the warning once to avoid spam
-        if (!_autoConnectLimitReachedLogged) {
-            FLEXIFI_LOGW("Auto-connect retry limit reached");
-            _autoConnectLimitReachedLogged = true;
-        }
-        return false;
-    }
-    
-    FLEXIFI_LOGI("Attempting auto-connect (attempt %d/%d)", _autoConnectRetryCount + 1, MAX_AUTO_CONNECT_RETRIES);
-    
-    _lastAutoConnectAttempt = currentTime;
-    _autoConnectRetryCount++;
-    
-    return _tryConnectToProfiles();
-}
-
-void Flexifi::setAutoConnectEnabled(bool enabled) {
-    _autoConnectEnabled = enabled;
-    if (enabled) {
-        _autoConnectRetryCount = 0;
-        _lastAutoConnectAttempt = 0;
-        _autoConnectLimitReachedLogged = false;
-        FLEXIFI_LOGI("Auto-connect enabled");
-    } else {
-        FLEXIFI_LOGI("Auto-connect disabled");
-    }
-}
-
-bool Flexifi::isAutoConnectEnabled() const {
-    return _autoConnectEnabled;
-}
-
-String Flexifi::getHighestPrioritySSID() const {
-    if (!_storage) {
-        return "";
-    }
-    
-    WiFiProfile highestPriorityProfile = _storage->getHighestPriorityProfile();
-    return highestPriorityProfile.ssid;
-}
-
-bool Flexifi::updateProfileLastUsed(const String& ssid) {
-    if (!_storage) {
-        return false;
-    }
-    
-    return _storage->updateProfileLastUsed(ssid);
-}
-
-// Profile management helpers
-
-bool Flexifi::_tryConnectToProfiles() {
-    if (!_storage) {
-        return false;
-    }
-    
-    std::vector<WiFiProfile> profiles = _storage->getProfilesByPriority();
-    
-    if (profiles.empty()) {
-        FLEXIFI_LOGD("No WiFi profiles available for auto-connect");
-        return false;
-    }
-    
-    // Scan for available networks only if we don't have recent results
-    unsigned long now = millis();
-    if (_networksJSON == "[]" || _networkCount == 0 || (now - _lastScanTime) > 60000) {
-        FLEXIFI_LOGD("Scanning for networks before auto-connect");
-        
-        // Set up callback for when scan completes
-        _onInternalScanComplete = [this, profiles](int networkCount) {
-            FLEXIFI_LOGD("Scan completed for auto-connect, proceeding with connection attempts");
-            _tryConnectWithProfiles(profiles);
-            _onInternalScanComplete = nullptr; // Clear callback
-        };
-        
-        scanNetworks();
-        
-        // If scan just started, defer the connection attempt
-        if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) {
-            FLEXIFI_LOGD("Scan in progress, deferring auto-connect");
-            return true; // Return true because scan was started
-        }
-    } else {
-        FLEXIFI_LOGD("Using cached network list for auto-connect (%d networks)", _networkCount);
-    }
-    
-    // Try to connect to the highest priority available network
-    for (const WiFiProfile& profile : profiles) {
-        if (!profile.autoConnect) {
-            continue;
-        }
-        
-        // Check if this network is available
-        if (_networksJSON.indexOf(profile.ssid) >= 0) {
-            FLEXIFI_LOGI("Attempting to connect to profile: %s (priority: %d)", 
-                        profile.ssid.c_str(), profile.priority);
-            
-            if (connectToWiFi(profile.ssid, profile.password)) {
-                // Reset retry count on successful connection
-                _autoConnectRetryCount = 0;
-                _autoConnectLimitReachedLogged = false;
-                _storage->updateProfileLastUsed(profile.ssid);
-                return true;
-            }
-        }
-    }
-    
-    FLEXIFI_LOGD("No available WiFi profiles found for auto-connect");
-    return false;
-}
-
-bool Flexifi::_connectToHighestPriorityNetwork() {
-    if (!_storage) {
-        return false;
-    }
-    
-    WiFiProfile highestPriorityProfile = _storage->getHighestPriorityProfile();
-    
-    if (!highestPriorityProfile.isValid()) {
-        FLEXIFI_LOGD("No valid WiFi profiles available");
-        return false;
-    }
-    
-    FLEXIFI_LOGI("Connecting to highest priority network: %s", highestPriorityProfile.ssid.c_str());
-    
-    return connectToWiFi(highestPriorityProfile.ssid, highestPriorityProfile.password);
-}
-
-void Flexifi::_updateProfilePriorities() {
-    if (!_storage) {
-        return;
-    }
-    
-    // This method could be used to automatically adjust priorities based on usage patterns
-    // For now, it's a placeholder for future enhancement
-    FLEXIFI_LOGD("Profile priorities update (placeholder)");
+    FLEXIFI_LOGD("WiFi state changed: %d -> %d", static_cast<int>(oldState), static_cast<int>(newState));
 }
 
 String Flexifi::_formatProfilesJSON(const std::vector<WiFiProfile>& profiles) const {
@@ -1237,55 +1278,89 @@ String Flexifi::_formatProfilesJSON(const std::vector<WiFiProfile>& profiles) co
     return json;
 }
 
-// WiFi Event Handling
-
-void Flexifi::_setupWiFiEvents() {
-    FLEXIFI_LOGD("Setting up WiFi event handlers");
-    WiFi.onEvent(_onWiFiEvent);
-}
-
-void Flexifi::_onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
-    if (!_instance) return;
+// Parameter persistence methods
+void Flexifi::_saveParameterValues() {
+    if (!_storage || !_parameters) {
+        return;
+    }
     
-    switch (event) {
-        case ARDUINO_EVENT_WIFI_SCAN_DONE:
-            FLEXIFI_LOGD("WiFi scan completed event received");
-            _instance->_updateNetworksJSON();
+    FLEXIFI_LOGD("Saving %d parameter values", _parameterCount);
+    
+    for (int i = 0; i < _parameterCount; i++) {
+        if (_parameters[i]) {
+            // Use shorter key format to avoid NVS 15-character limit
+            String key = "p_" + _parameters[i]->getID();
+            String value = _parameters[i]->getValue();
             
-            // Call internal scan completion callback if set
-            if (_instance->_onInternalScanComplete) {
-                _instance->_onInternalScanComplete(_instance->_networkCount);
+            if (_storage->saveConfig(key, value)) {
+                FLEXIFI_LOGD("Saved parameter: %s = %s", _parameters[i]->getID().c_str(), value.c_str());
+            } else {
+                FLEXIFI_LOGW("Failed to save parameter: %s", _parameters[i]->getID().c_str());
             }
-            break;
-            
-        default:
-            // We only care about scan completion for now
-            break;
+        }
     }
 }
 
-bool Flexifi::_tryConnectWithProfiles(const std::vector<WiFiProfile>& profiles) {
-    // Try to connect to the highest priority available network
-    for (const WiFiProfile& profile : profiles) {
-        if (!profile.autoConnect) {
-            continue;
+void Flexifi::_loadParameterValues() {
+    if (!_storage || !_parameters) {
+        return;
+    }
+    
+    // Check if storage is actually available before trying to load
+    if (!_storage->isLittleFSAvailable() && !_storage->isNVSAvailable()) {
+        FLEXIFI_LOGD("Storage not available, skipping parameter load");
+        return;
+    }
+    
+    FLEXIFI_LOGD("Loading parameter values for %d parameters", _parameterCount);
+    
+    for (int i = 0; i < _parameterCount; i++) {
+        if (_parameters[i]) {
+            _loadParameterValue(_parameters[i]);
         }
+    }
+}
+
+void Flexifi::_loadParameterValue(FlexifiParameter* parameter) {
+    if (!_storage || !parameter) {
+        return;
+    }
+    
+    // Check if storage is actually available before trying to load
+    if (!_storage->isLittleFSAvailable() && !_storage->isNVSAvailable()) {
+        FLEXIFI_LOGD("Storage not available, skipping parameter load for: %s", parameter->getID().c_str());
+        return;
+    }
+    
+    // Use shorter key format to avoid NVS 15-character limit
+    String key = "p_" + parameter->getID();
+    String savedValue = _storage->loadConfig(key);
+    
+    if (!savedValue.isEmpty()) {
+        parameter->setValue(savedValue);
+        FLEXIFI_LOGD("Loaded parameter: %s = %s", parameter->getID().c_str(), savedValue.c_str());
         
-        // Check if this network is available
-        if (_networksJSON.indexOf(profile.ssid) >= 0) {
-            FLEXIFI_LOGI("Attempting to connect to profile: %s (priority: %d)", 
-                        profile.ssid.c_str(), profile.priority);
-            
-            if (connectToWiFi(profile.ssid, profile.password)) {
-                // Reset retry count on successful connection
-                _autoConnectRetryCount = 0;
-                _autoConnectLimitReachedLogged = false;
-                _storage->updateProfileLastUsed(profile.ssid);
-                return true;
-            }
+        // Special handling for mDNS hostname parameter
+        if (parameter->getID() == "mdns_hostname" && savedValue != _mdnsHostname) {
+            FLEXIFI_LOGI("Restoring mDNS hostname from storage: %s", savedValue.c_str());
+            setMDNSHostname(savedValue);
         }
+    } else {
+        FLEXIFI_LOGD("No saved value found for parameter: %s", parameter->getID().c_str());
+    }
+}
+
+// Password generation implementation
+String Flexifi::_generatePassword(int length) {
+    const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    String password = "";
+    
+    // Seed random number generator with MAC address and current time
+    randomSeed(micros() + esp_random());
+    
+    for (int i = 0; i < length; i++) {
+        password += charset[random(0, sizeof(charset) - 1)];
     }
     
-    FLEXIFI_LOGD("No available WiFi profiles found for auto-connect");
-    return false;
+    return password;
 }

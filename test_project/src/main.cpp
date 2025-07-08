@@ -12,7 +12,7 @@ static const char* TAG = "FlexifiTest";
 
 // Web server and Flexifi instances
 AsyncWebServer server(80);
-Flexifi portal(&server);
+Flexifi portal(&server, true); // Enable password generation
 
 // NeoPixel configuration
 Adafruit_NeoPixel pixel(NEOPIXEL_COUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -73,13 +73,33 @@ void setup() {
     portal.setPortalTimeout(5 * 60 * 1000); // 5 minutes
     portal.setAutoConnectEnabled(true);
 
-    // Add some test WiFi profiles
-    ESP_LOGI(TAG, "📋 Adding test WiFi profiles...");
-    portal.addWiFiProfile("TestNetwork1", "password123", 100);
-    portal.addWiFiProfile("TestNetwork2", "password456", 80);
-    portal.addWiFiProfile("TestNetwork3", "password789", 60);
+    // Set very low signal quality threshold for debugging
+    // portal.setMinSignalQuality(-100); // Accept very weak signals
 
-    ESP_LOGI(TAG, "✅ Added %d WiFi profiles", portal.getWiFiProfileCount());
+#ifdef FLEXIFI_MDNS
+    // Add mDNS hostname parameter
+    portal.addParameter("mdns_hostname", "mDNS Hostname", portal.getMDNSHostname(), 32);
+#endif
+
+    // Clear existing profiles to test "no profiles" scenario
+    // Comment this out if you want to test with existing profiles
+    // if (portal.getWiFiProfileCount() > 0) {
+    //     ESP_LOGI(TAG, "🧹 Clearing existing WiFi profiles for testing...");
+    //     portal.clearAllWiFiProfiles();
+    // }
+
+    // Add test WiFi profiles (uncomment to test auto-connect scenarios)
+    // ESP_LOGI(TAG, "📋 Adding test WiFi profiles...");
+    // portal.addWiFiProfile("TestNetwork1", "password123", 100);
+    // portal.addWiFiProfile("TestNetwork2", "password456", 80);
+    // portal.addWiFiProfile("TestNetwork3", "password789", 60);
+
+    ESP_LOGI(TAG, "✅ WiFi profiles in storage: %d", portal.getWiFiProfileCount());
+
+    // Debug: List all WiFi profiles
+    ESP_LOGI(TAG, "📋 All saved WiFi profiles:");
+    String profilesJSON = portal.getWiFiProfilesJSON();
+    ESP_LOGI(TAG, "%s", profilesJSON.c_str());
 
     // Set up event callbacks
     portal.onPortalStart([]() {
@@ -118,6 +138,15 @@ void setup() {
 
     portal.onConfigSave([](const String& ssid, const String& password) {
         ESP_LOGI(TAG, "💾 New WiFi configuration saved: %s", ssid.c_str());
+
+#ifdef FLEXIFI_MDNS
+        // Check if mDNS hostname parameter was updated
+        String newHostname = portal.getParameterValue("mdns_hostname");
+        if (!newHostname.isEmpty() && newHostname != portal.getMDNSHostname()) {
+            ESP_LOGI(TAG, "🏷️  Updating mDNS hostname to: %s", newHostname.c_str());
+            portal.setMDNSHostname(newHostname);
+        }
+#endif
     });
 
     portal.onScanComplete([](int networkCount) {
@@ -125,21 +154,35 @@ void setup() {
         // Keep current color - don't change it just for scan completion
     });
 
-    // Try auto-connect first
-    ESP_LOGI(TAG, "🔍 Attempting auto-connect to saved networks...");
-    setNeoPixelColor(COLOR_SCANNING);
+    // WiFi connection logic based on profiles
+    int profileCount = portal.getWiFiProfileCount();
+    ESP_LOGI(TAG, "🔍 Profile count check: %d profiles found", profileCount);
 
-    if (!portal.autoConnect()) {
-        ESP_LOGW(TAG, "⚠️  Auto-connect failed, starting captive portal...");
+    if (profileCount == 0) {
+        ESP_LOGI(TAG, "📭 No WiFi profiles found, starting captive portal...");
 
-        if (portal.startPortal("Flexifi Test", "flexifi123")) {
+        if (portal.startPortal("Flexifi Test")) { // No password - will use generated one
             ESP_LOGI(TAG, "✅ Captive portal started successfully");
             ESP_LOGI(TAG, "📶 SSID: Flexifi Test");
-            ESP_LOGI(TAG, "🔐 Password: flexifi123");
+            ESP_LOGI(TAG, "🔐 Password: %s", portal.getGeneratedPassword().c_str());
             ESP_LOGI(TAG, "🌐 Portal URL: http://192.168.4.1");
+
+            // Start initial WiFi scan immediately
+            ESP_LOGI(TAG, "🔍 Starting initial WiFi scan...");
+            setNeoPixelColor(COLOR_SCANNING);
+            bool scanStarted = portal.scanNetworks(true); // Bypass throttle for initial scan
+            ESP_LOGI(TAG, "🔍 Initial scan result: %s", scanStarted ? "SUCCESS" : "FAILED");
         } else {
             ESP_LOGE(TAG, "❌ Failed to start captive portal");
         }
+    } else {
+        ESP_LOGI(TAG, "🔍 Found %d WiFi profile(s), starting auto-connect (continuous retry)...", profileCount);
+        ESP_LOGI(TAG, "🎯 Highest priority SSID: %s", portal.getHighestPrioritySSID().c_str());
+        ESP_LOGI(TAG, "💡 Portal mode can only be triggered manually (e.g., button press)");
+        setNeoPixelColor(COLOR_SCANNING);
+
+        // Start auto-connect - it will continuously retry
+        portal.autoConnect();
     }
 
     // Start the web server
@@ -149,12 +192,14 @@ void setup() {
     ESP_LOGI(TAG, "=================================");
     ESP_LOGI(TAG, "✅ Setup completed - entering main loop");
     ESP_LOGI(TAG, "=================================");
+    Serial.println("Generated WiFi password: " + portal.getGeneratedPassword());
 }
 
 void loop() {
     // Update Flexifi
     portal.loop();
 
+#ifdef FLEXIFI_DEBUG_LEVEL
     // Update NeoPixel status every 500ms
     static unsigned long lastNeoPixelUpdate = 0;
     if (millis() - lastNeoPixelUpdate > 500) {
@@ -168,8 +213,9 @@ void loop() {
         printStatus();
         lastStatusPrint = millis();
     }
+#endif
 
-    delay(100);
+    // delay(100);
 }
 
 // =============================================================================
@@ -209,6 +255,11 @@ void printStatus() {
 
     if (!highestPrioritySSID.isEmpty()) {
         ESP_LOGI(TAG, "Highest Priority: %s", highestPrioritySSID.c_str());
+    }
+
+    // Show generated password if portal is active (for LCD display demo)
+    if (portalState == PortalState::ACTIVE && !portal.getGeneratedPassword().isEmpty()) {
+        ESP_LOGI(TAG, "Generated Password: %s", portal.getGeneratedPassword().c_str());
     }
 
     ESP_LOGI(TAG, "Uptime: %lu seconds", millis() / 1000);

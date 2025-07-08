@@ -66,6 +66,9 @@ public:
     bool isLittleFSAvailable() const;
     bool isNVSAvailable() const;
     String getStorageInfo() const;
+    
+    // Retry failed initialization
+    bool retryInitialization();
 
 private:
     bool _littleFSAvailable;
@@ -80,6 +83,7 @@ private:
     mutable std::vector<WiFiProfile> _cachedProfiles;
     mutable unsigned long _cacheTime;
     static const unsigned long CACHE_DURATION = 5000; // 5 seconds
+    mutable bool _migrationInProgress;
 
     // Configuration constants
     static const char* CREDENTIALS_FILE;
@@ -121,6 +125,7 @@ private:
     std::vector<WiFiProfile> _decodeProfiles(const String& encoded) const;
     int _findProfileIndex(const std::vector<WiFiProfile>& profiles, const String& ssid) const;
     void _sortProfilesByPriority(std::vector<WiFiProfile>& profiles) const;
+    bool _saveWiFiProfileDirect(const WiFiProfile& profile);
 };
 
 #endif // STORAGEMANAGER_H

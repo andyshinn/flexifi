@@ -144,14 +144,17 @@ void PortalWebServer::broadcastStatus(const String& message) {
 void PortalWebServer::broadcastNetworks(const String& networksJSON) {
 #ifndef FLEXIFI_DISABLE_WEBSOCKET
     if (_ws && _clientCount > 0) {
-        DynamicJsonDocument doc(1024);
+        FLEXIFI_LOGD("📡 Broadcasting scan complete signal to %d clients", _clientCount);
+        
+        // Send simple signal to refresh networks instead of large data payload
+        DynamicJsonDocument doc(256);
         doc["type"] = "scan_complete";
-        doc["data"]["networks"] = serialized(networksJSON);
+        doc["data"]["refresh_networks"] = true;
         
         String message;
         serializeJson(doc, message);
+        FLEXIFI_LOGD("📤 Broadcasting refresh signal: %s", message.c_str());
         _broadcastToAllClients(message);
-        FLEXIFI_LOGD("Networks broadcast sent");
     }
 #endif
 }
@@ -305,13 +308,15 @@ void PortalWebServer::handleNetworksJSON(AsyncWebServerRequest* request) {
     }
 
     String networksArray = _portal->getNetworksJSON();
+    FLEXIFI_LOGD("📡 networks.json request - raw networks: %s", networksArray.substring(0, 100).c_str());
     
     // Wrap the networks array in the expected format {networks: [...]}
-    DynamicJsonDocument doc(3072); // Increased size to accommodate wrapper
+    DynamicJsonDocument doc(8192);
     doc["networks"] = serialized(networksArray);
     
     String response;
     serializeJson(doc, response);
+    FLEXIFI_LOGD("📡 networks.json response: %s", response.substring(0, 150).c_str());
     _sendJSON(request, response);
 }
 
@@ -359,6 +364,33 @@ void PortalWebServer::onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketCli
         case WS_EVT_CONNECT:
             FLEXIFI_LOGD("WebSocket client connected: %u", client->id());
             _clientCount++;
+            
+            // Send refresh signal to newly connected client if networks are available
+            if (_portal) {
+                String currentNetworks = _portal->getNetworksJSON();
+                if (!currentNetworks.isEmpty() && currentNetworks != "[]") {
+                    FLEXIFI_LOGD("📡 Sending refresh signal to new WebSocket client");
+                    
+                    DynamicJsonDocument doc(256);
+                    doc["type"] = "scan_complete";
+                    doc["data"]["refresh_networks"] = true;
+                    
+                    String message;
+                    serializeJson(doc, message);
+                    FLEXIFI_LOGD("📤 Sending refresh signal to new client: %s", message.c_str());
+                    client->text(message);
+                }
+                
+                // Also send current status
+                String statusJSON = _portal->getStatusJSON();
+                DynamicJsonDocument statusDoc(512);
+                statusDoc["type"] = "status_update";
+                statusDoc["data"] = serialized(statusJSON);
+                
+                String statusMessage;
+                serializeJson(statusDoc, statusMessage);
+                client->text(statusMessage);
+            }
             break;
             
         case WS_EVT_DISCONNECT:
